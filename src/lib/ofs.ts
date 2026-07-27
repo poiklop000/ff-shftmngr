@@ -182,12 +182,13 @@ export const LINE_STATE_COLORS: Record<LineStateClass, string> = {
 
 export function classifyLineState(runstate: OfsRunState | undefined): LineStateClass {
   const state = runstate?.state?.toLowerCase() ?? '';
-  // Order matters: "job.setup.running" contains both "setup" and "running",
-  // so setup must be checked before running. Likewise "job.setup.*" states
-  // are setup, not running.
+  // Order matters: a single state string can contain multiple keywords.
+  // "job.setup.running" contains both "setup" and "running", so setup must
+  // be checked before running. Planned downtime states contain "downtime"
+  // too, so "planned" must be checked before "downtime".
   if (state.includes('setup')) return 'setup';
-  if (state.includes('downtime')) return 'downtime';
   if (state.includes('planned')) return 'planned';
+  if (state.includes('downtime')) return 'downtime';
   if (state.includes('running')) return 'running';
   if (state.includes('shift') || state.includes('job')) return 'idle';
   return 'idle';
