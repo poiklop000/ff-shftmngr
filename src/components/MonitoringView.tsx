@@ -64,10 +64,11 @@ export function MonitoringView({
 
   const activeHours = getActiveHours(currentShift, customHours);
 
-  const loadTimeline = useCallback(async (shift: Shift, hours: string[], shiftDate: string) => {
+  const loadTimeline = useCallback(async (shift: Shift, customHrs: string[], shiftDate: string) => {
     if (!shiftDate) { setTimelineEvents([]); return; }
     setTimelineLoading(true);
     try {
+      const hours = getActiveHours(shift, customHrs);
       const startStr = hours[0]?.split(' - ')[0]?.trim();
       const isOvernight = startStr ? parseInt(startStr.split(':')[0] ?? '0', 10) >= 12 : false;
       const events = await fetchDowntimeByDate(shiftDate);
@@ -90,8 +91,8 @@ export function MonitoringView({
   }, []);
 
   useEffect(() => {
-    loadTimeline(currentShift, activeHours, date);
-  }, [loadTimeline, currentShift, activeHours, date]);
+    loadTimeline(currentShift, customHours, date);
+  }, [loadTimeline, currentShift, customHours, date]);
 
   const shiftTimelineEvents = useMemo(
     () => filterByShiftWindow(timelineEvents, currentShift, activeHours, date, (e) => e.start_text),
