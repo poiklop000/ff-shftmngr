@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Activity, Loader2 } from 'lucide-react';
 import { consoleTimeToShiftMinutes, getActiveHours, type Shift } from '@/types';
 import type { DowntimeEvent } from '@/lib/downtime';
 
@@ -51,7 +51,9 @@ function computeNowPct(
   const m = parseInt(timeMatch[2], 10);
   const minOfDay = h * 60 + m;
   let shiftMin = minOfDay;
-  if (shiftEndMin > 1440 && minOfDay < shiftStartMin) shiftMin = minOfDay + 1440;
+  if (shiftEndMin > 1440 && minOfDay < shiftStartMin) {
+    shiftMin = minOfDay + 1440;
+  }
   if (shiftMin < shiftStartMin || shiftMin > shiftEndMin) return null;
   return ((shiftMin - shiftStartMin) / totalMin) * 100;
 }
@@ -67,6 +69,7 @@ interface TimelineBlock {
 interface HourMark {
   pct: number;
   label: string;
+  showLabel: boolean;
 }
 
 interface DowntimeTimelineProps {
@@ -107,11 +110,13 @@ export function DowntimeTimeline({
     const totalMin = shiftEndMin - shiftStartMin;
 
     const nowPct = computeNowPct(consoleTime, date, shiftStartMin, shiftEndMin, totalMin);
-    const nowShiftMin = nowPct !== null ? shiftStartMin + (nowPct / 100) * totalMin : null;
+    let nowShiftMin: number | null = null;
+    if (nowPct !== null) {
+      nowShiftMin = shiftStartMin + (nowPct / 100) * totalMin;
+    }
 
     const blocks: TimelineBlock[] = [];
     let totalDowntimeMin = 0;
-
     for (const evt of events) {
       if (!evt.start_text) continue;
       const startMin = consoleTimeToShiftMinutes(evt.start_text, date);
@@ -128,12 +133,13 @@ export function DowntimeTimeline({
 
       const leftPct = ((clampedStart - shiftStartMin) / totalMin) * 100;
       const widthPct = (durMin / totalMin) * 100;
+      const reason = evt.reason ?? evt.category ?? 'Downtime';
 
       blocks.push({
         leftPct,
-        widthPct: Math.max(widthPct, 0.25),
+        widthPct: Math.max(widthPct, 0.3),
         color: getTypeColor(evt.downtime_type),
-        label: evt.reason ?? evt.category ?? 'Downtime',
+        label: reason,
         durationLabel: formatDurationShort(durMin),
       });
       totalDowntimeMin += durMin;
@@ -142,9 +148,12 @@ export function DowntimeTimeline({
     const hourMarks: HourMark[] = [];
     const labelInterval = totalMin > 600 ? 2 : 1;
     for (let m = shiftStartMin, i = 0; m <= shiftEndMin; m += 60, i++) {
-      if (i % labelInterval === 0) {
-        hourMarks.push({ pct: ((m - shiftStartMin) / totalMin) * 100, label: formatHour(m) });
-      }
+      const pct = ((m - shiftStartMin) / totalMin) * 100;
+      hourMarks.push({
+        pct,
+        label: formatHour(m),
+        showLabel: i % labelInterval === 0,
+      });
     }
 
     const runWidthPct = nowPct !== null ? nowPct : 100;
@@ -153,22 +162,47 @@ export function DowntimeTimeline({
   }, [events, currentShift, customHours, date, consoleTime]);
 
   return (
-    <div className="mb-4 px-1">
+    <div className="card rounded-lg p-4 mb-4 border border-slate-200 bg-white">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Activity size={16} className="text-slate-600" />
+          <h3 className="m-0 text-sm font-bold uppercase tracking-wide text-slate-700">Shift Timeline</h3>
+        </div>
+        {eventCount > 0 && (
+          <span className="text-[11px] font-semibold text-slate-500">
+            {eventCount} {eventCount === 1 ? 'event' : 'events'} · {formatDurationShort(totalDowntimeMin)} downtime
+          </span>
+        )}
+      </div>
+
       {loading ? (
-        <div className="flex items-center justify-center py-5 text-slate-300">
-          <Loader2 size={16} className="animate-spin" />
+        <div className="flex items-center justify-center py-6 text-slate-400">
+          <Loader2 size={18} className="animate-spin" />
         </div>
       ) : (
         <>
-          {/* Timeline track */}
+          <div className="relative h-5 mb-1">
+            {hourMarks.filter((m) => m.showLabel).map((m, i) => (
+              <span
+                key={i}
+                className="absolute text-[10px] font-semibold text-slate-400 -translate-x-1/2 whitespace-nowrap"
+                style={{ left: `${m.pct}%` }}
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+
           <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden">
-            {/* Running / elapsed fill */}
             <div
-              className="absolute top-0 bottom-0"
-              style={{ left: '0%', width: `${runWidthPct}%`, backgroundColor: RUNNING_COLOR }}
+              className="absolute top-0 bottom-0 rounded-l-md"
+              style={{
+                left: '0%',
+                width: `${runWidthPct}%`,
+                backgroundColor: RUNNING_COLOR,
+              }}
             />
 
-            {/* Hour marks */}
             {hourMarks.map((m, i) => (
               <div
                 key={i}
@@ -177,46 +211,33 @@ export function DowntimeTimeline({
               />
             ))}
 
-            {/* Downtime blocks */}
             {blocks.map((b, i) => (
               <div
                 key={i}
-                className="absolute top-0 bottom-0 cursor-default transition-opacity"
+                className="absolute top-1 bottom-1 rounded-sm transition-opacity hover:opacity-80 cursor-default"
                 style={{
                   left: `${b.leftPct}%`,
                   width: `${b.widthPct}%`,
                   backgroundColor: b.color,
-                  minWidth: '2px',
+                  minWidth: '3px',
                 }}
                 title={`${b.label} · ${b.durationLabel}`}
               />
             ))}
 
-            {/* Now needle */}
             {nowPct !== null && (
               <div
                 className="absolute top-0 bottom-0 w-0.5 bg-slate-700 z-10 pointer-events-none"
                 style={{ left: `${nowPct}%` }}
-              />
+              >
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-slate-700" />
+              </div>
             )}
           </div>
 
-          {/* Hour labels */}
-          <div className="relative h-4 mt-1">
-            {hourMarks.map((m, i) => (
-              <span
-                key={i}
-                className="absolute text-[10px] font-medium text-slate-400 -translate-x-1/2 whitespace-nowrap"
-                style={{ left: `${m.pct}%` }}
-              >
-                {m.label}
-              </span>
-            ))}
-          </div>
-
           {eventCount === 0 && (
-            <p className="text-[11px] text-slate-400 font-medium mt-1 m-0">
-              No downtime this shift.
+            <p className="text-center text-[11px] text-slate-400 font-medium mt-2 m-0">
+              No downtime events this shift — clean run.
             </p>
           )}
         </>
