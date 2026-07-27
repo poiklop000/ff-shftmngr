@@ -15,6 +15,7 @@ import {
 import { ShiftTable } from '@/components/ShiftTable';
 import { DowntimeTimeline } from '@/components/DowntimeTimeline';
 import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
+import { fetchOfsStatus, type OfsLiveStatus } from '@/lib/ofs';
 import { useAutoGrow } from '@/lib/ui';
 
 interface MonitoringViewProps {
@@ -61,6 +62,7 @@ export function MonitoringView({
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<DowntimeEvent[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [consoleTime, setConsoleTime] = useState('-');
 
   const activeHours = getActiveHours(currentShift, customHours);
 
@@ -93,6 +95,26 @@ export function MonitoringView({
   useEffect(() => {
     loadTimeline(currentShift, customHours, date);
   }, [loadTimeline, currentShift, customHours, date]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadConsoleTime = async () => {
+      try {
+        const data: OfsLiveStatus = await fetchOfsStatus();
+        if (cancelled) return;
+        const t = data.workcentre?.consoletimeText || data.timestampText || '-';
+        setConsoleTime(t);
+      } catch {
+        // leave existing console time if the fetch fails
+      }
+    };
+    loadConsoleTime();
+    const id = setInterval(loadConsoleTime, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const shiftTimelineEvents = useMemo(
     () => filterByShiftWindow(timelineEvents, currentShift, activeHours, date, (e) => e.start_text),
@@ -265,7 +287,7 @@ export function MonitoringView({
         currentShift={currentShift}
         customHours={customHours}
         date={date}
-        consoleTime="-"
+        consoleTime={consoleTime}
         loading={timelineLoading}
       />
 
