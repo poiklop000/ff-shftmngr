@@ -181,7 +181,7 @@ export function DowntimeTimeline({
         </div>
       ) : (
         <>
-          <div className="relative h-5 mb-1">
+          <div className="relative h-5 mb-1 px-4">
             {hourMarks.filter((m) => m.showLabel).map((m, i) => (
               <span
                 key={i}
@@ -193,7 +193,7 @@ export function DowntimeTimeline({
             ))}
           </div>
 
-          <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden">
+          <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden mx-4">
             <div
               className="absolute top-0 bottom-0 rounded-l-md"
               style={{
