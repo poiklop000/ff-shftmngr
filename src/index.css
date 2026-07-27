@@ -535,6 +535,10 @@ tbody tr:hover { background-color: #eff6ff; }
   .table-input.yield-input-green { color: #166534 !important; font-weight: 700 !important; }
   .no-print, .table-text-area.no-print, .sku-textarea.no-print { display: none !important; }
   .print-only { display: block !important; }
+
+  /* ---- Print: shift timeline graph ---- */
+  .card.rounded-lg:has(.relative.h-9) { page-break-inside: avoid !important; margin-bottom: 15px !important; }
+  .relative.h-9 { height: 32px !important; }
   .print-text-block {
     white-space: pre-wrap !important;
     word-wrap: break-word !important;

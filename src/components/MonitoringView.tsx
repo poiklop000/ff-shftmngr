@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import {
+  filterByShiftWindow,
   generateHours,
   getActiveHours,
   parseNumber,
@@ -12,6 +13,8 @@ import {
   type ShiftRow,
 } from '@/types';
 import { ShiftTable } from '@/components/ShiftTable';
+import { DowntimeTimeline } from '@/components/DowntimeTimeline';
+import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
 import { useAutoGrow } from '@/lib/ui';
 
 interface MonitoringViewProps {
@@ -56,6 +59,44 @@ export function MonitoringView({
   const [importingCounter, setImportingCounter] = useState(false);
   const [importingDowntime, setImportingDowntime] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<DowntimeEvent[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const activeHours = getActiveHours(currentShift, customHours);
+
+  const loadTimeline = useCallback(async (shift: Shift, hours: string[], shiftDate: string) => {
+    if (!shiftDate) { setTimelineEvents([]); return; }
+    setTimelineLoading(true);
+    try {
+      const startStr = hours[0]?.split(' - ')[0]?.trim();
+      const isOvernight = startStr ? parseInt(startStr.split(':')[0] ?? '0', 10) >= 12 : false;
+      const events = await fetchDowntimeByDate(shiftDate);
+      if (isOvernight) {
+        const d = new Date(`${shiftDate}T00:00:00`);
+        d.setDate(d.getDate() + 1);
+        const ny = d.getFullYear();
+        const nm = String(d.getMonth() + 1).padStart(2, '0');
+        const nd = String(d.getDate()).padStart(2, '0');
+        const next = await fetchDowntimeByDate(`${ny}-${nm}-${nd}`);
+        events.push(...next);
+        events.sort((a, b) => b.start_epoch - a.start_epoch);
+      }
+      setTimelineEvents(events);
+    } catch {
+      setTimelineEvents([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTimeline(currentShift, activeHours, date);
+  }, [loadTimeline, currentShift, activeHours, date]);
+
+  const shiftTimelineEvents = useMemo(
+    () => filterByShiftWindow(timelineEvents, currentShift, activeHours, date, (e) => e.start_text),
+    [timelineEvents, currentShift, activeHours, date],
+  );
 
   const handleImportCounter = async () => {
     setImportingCounter(true);
@@ -85,7 +126,6 @@ export function MonitoringView({
 
   const showCustomPanel = currentShift === 'Custom';
 
-  const activeHours = getActiveHours(currentShift, customHours);
   const currentData = db[currentShift];
   const rowCount = Object.keys(currentData.rows).length;
 
@@ -218,6 +258,15 @@ export function MonitoringView({
           </div>
         </div>
       </div>
+
+      <DowntimeTimeline
+        events={shiftTimelineEvents}
+        currentShift={currentShift}
+        customHours={customHours}
+        date={date}
+        consoleTime="-"
+        loading={timelineLoading}
+      />
 
       <ShiftTable
         hours={activeHours}
