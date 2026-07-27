@@ -9,6 +9,8 @@ const TYPE_COLORS: Record<string, string> = {
   SETUP: '#eab308',
 };
 
+const RUNNING_COLOR = '#16a34a';
+
 function getTypeColor(type: string | null): string {
   if (!type) return '#94a3b8';
   return TYPE_COLORS[type.toUpperCase()] ?? '#94a3b8';
@@ -87,13 +89,14 @@ export function DowntimeTimeline({
   consoleTime,
   loading,
 }: DowntimeTimelineProps) {
-  const { blocks, hourMarks, nowPct, totalDowntimeMin, eventCount } = useMemo(() => {
+  const { blocks, hourMarks, nowPct, runWidthPct, totalDowntimeMin, eventCount } = useMemo(() => {
     const hours = getActiveHours(currentShift, customHours);
     if (hours.length === 0 || !date) {
       return {
         blocks: [] as TimelineBlock[],
         hourMarks: [] as HourMark[],
         nowPct: null,
+        runWidthPct: 100,
         totalDowntimeMin: 0,
         eventCount: 0,
       };
@@ -153,7 +156,9 @@ export function DowntimeTimeline({
       });
     }
 
-    return { blocks, hourMarks, nowPct, totalDowntimeMin, eventCount: blocks.length };
+    const runWidthPct = nowPct !== null ? nowPct : 100;
+
+    return { blocks, hourMarks, nowPct, runWidthPct, totalDowntimeMin, eventCount: blocks.length };
   }, [events, currentShift, customHours, date, consoleTime]);
 
   return (
@@ -189,10 +194,19 @@ export function DowntimeTimeline({
           </div>
 
           <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden">
+            <div
+              className="absolute top-0 bottom-0 rounded-l-md"
+              style={{
+                left: '0%',
+                width: `${runWidthPct}%`,
+                backgroundColor: RUNNING_COLOR,
+              }}
+            />
+
             {hourMarks.map((m, i) => (
               <div
                 key={i}
-                className="absolute top-0 bottom-0 w-px bg-slate-200"
+                className="absolute top-0 bottom-0 w-px bg-white/40 z-[5] pointer-events-none"
                 style={{ left: `${m.pct}%` }}
               />
             ))}
@@ -218,27 +232,6 @@ export function DowntimeTimeline({
               >
                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-slate-700" />
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 mt-2.5 text-[10px] font-semibold text-slate-500 flex-wrap">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#dc2626' }} />
-              Unplanned
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#2563eb' }} />
-              Planned
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#eab308' }} />
-              Setup
-            </span>
-            {nowPct !== null && (
-              <span className="inline-flex items-center gap-1 ml-auto">
-                <span className="inline-block w-0.5 h-3 bg-slate-700" />
-                Now
-              </span>
             )}
           </div>
 
