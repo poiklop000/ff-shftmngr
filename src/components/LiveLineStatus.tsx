@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { fetchOfsStatus, classifyLineState, LINE_STATE_COLORS, type OfsLiveStatus, type LineStateClass } from '@/lib/ofs';
 import { fetchHourlySummaryByDate, type HourlySummaryEntry } from '@/lib/counterLogs';
-import { filterByShiftWindow, SHIFT_LABELS, type Shift } from '@/types';
+import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
 
 const REFRESH_MS = 1000;
 const SUMMARY_REFRESH_MS = 30000;
@@ -32,6 +32,18 @@ function dateToStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function nextDateStr(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return dateToStr(d);
+}
+
+function isOvernightShift(shift: Shift, customHours: string[]): boolean {
+  const hours = getActiveHours(shift, customHours);
+  const startStr = hours[0]?.split(' - ')[0]?.trim();
+  return startStr ? parseInt(startStr.split(':')[0], 10) >= 12 : false;
 }
 
 interface LiveLineStatusProps {
@@ -85,6 +97,10 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
     setSummaryError(null);
     try {
       const data = await fetchHourlySummaryByDate(date);
+      if (isOvernightShift(currentShift, customHours)) {
+        const nextData = await fetchHourlySummaryByDate(nextDateStr(date));
+        data.push(...nextData);
+      }
       setSummary(data);
     } catch (err) {
       setSummaryError(err instanceof Error ? err.message : 'Failed to load production summary');
@@ -92,7 +108,7 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [currentShift, customHours]);
 
   useEffect(() => {
     if (!date) return;

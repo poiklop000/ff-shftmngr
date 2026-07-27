@@ -17,7 +17,7 @@ import {
   type DowntimeComment,
   type DowntimeEvent,
 } from '@/lib/downtime';
-import { filterByShiftWindow, SHIFT_LABELS, type Shift } from '@/types';
+import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
 
 function todayStr(): string {
   const now = new Date();
@@ -32,6 +32,18 @@ function dateToStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function nextDateStr(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return dateToStr(d);
+}
+
+function isOvernightShift(shift: Shift, customHours: string[]): boolean {
+  const hours = getActiveHours(shift, customHours);
+  const startStr = hours[0]?.split(' - ')[0]?.trim();
+  return startStr ? parseInt(startStr.split(':')[0], 10) >= 12 : false;
 }
 
 export function DowntimeHistory({
@@ -58,13 +70,18 @@ export function DowntimeHistory({
     setError(null);
     try {
       const data = await fetchDowntimeByDate(date);
+      if (isOvernightShift(currentShift, customHours)) {
+        const nextEvents = await fetchDowntimeByDate(nextDateStr(date));
+        data.push(...nextEvents);
+        data.sort((a, b) => a.start_epoch - b.start_epoch);
+      }
       setEvents(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load downtime history');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentShift, customHours]);
 
   useEffect(() => {
     if (activeDate) loadHistory(activeDate);
