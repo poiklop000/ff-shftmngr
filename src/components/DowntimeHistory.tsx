@@ -224,7 +224,7 @@ export function DowntimeHistory({
                   <th className="px-4 py-2.5">Start Time</th>
                   <th className="px-4 py-2.5">Category</th>
                   <th className="px-4 py-2.5">Reason</th>
-                  <th className="px-4 py-2.5 hidden sm:table-cell">Type</th>
+                  <th className="px-4 py-2.5">Type</th>
                   <th className="px-4 py-2.5 hidden sm:table-cell">Crew</th>
                   <th className="px-4 py-2.5 text-right">Duration</th>
                   <th className="px-4 py-2.5 text-center">Status</th>
@@ -254,7 +254,7 @@ export function DowntimeHistory({
                         </td>
                         <td className="px-4 py-3 text-slate-600">{evt.category ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-700">{evt.reason ?? '—'}</td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
+                        <td className="px-4 py-3">
                           <DowntimeTypeBadge type={evt.downtime_type} />
                         </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap hidden sm:table-cell">
