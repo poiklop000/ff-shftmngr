@@ -181,19 +181,24 @@ export function DowntimeTimeline({
         </div>
       ) : (
         <>
-          <div className="relative h-5 mb-1 px-4">
-            {hourMarks.filter((m) => m.showLabel).map((m, i) => (
+          <div className="relative h-5 mb-1">
+            {hourMarks.filter((m) => m.showLabel).map((m, i, arr) => {
+              const isFirst = i === 0;
+              const isLast = i === arr.length - 1;
+              const translate = isFirst ? 'translate-x-0' : isLast ? '-translate-x-full' : '-translate-x-1/2';
+              return (
               <span
                 key={i}
-                className="absolute text-[10px] font-semibold text-slate-400 -translate-x-1/2 whitespace-nowrap"
+                className={`absolute text-[10px] font-semibold text-slate-400 whitespace-nowrap ${translate}`}
                 style={{ left: `${m.pct}%` }}
               >
                 {m.label}
               </span>
-            ))}
+              );
+            })}
           </div>
 
-          <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden mx-4">
+          <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden">
             <div
               className="absolute top-0 bottom-0 rounded-l-md"
               style={{
