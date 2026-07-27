@@ -493,7 +493,7 @@ function timeStrToMinutes(time: string): number {
  * (selected overnight shift's early morning). The result is timezone-independent
  * because both the event time and the shift date are in the same console tz.
  */
-function consoleTimeToShiftMinutes(consoleTime: string, shiftDate: string): number {
+export function consoleTimeToShiftMinutes(consoleTime: string, shiftDate: string): number {
   const evtDate = consoleTime.slice(0, 10); // "YYYY-MM-DD"
   const timeMatch = consoleTime.match(/(\d{2}):(\d{2})/);
   const minOfDay = timeMatch

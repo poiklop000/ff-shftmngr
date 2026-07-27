@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { fetchOfsStatus, classifyLineState, LINE_STATE_COLORS, type OfsLiveStatus, type LineStateClass } from '@/lib/ofs';
 import { fetchHourlySummaryByDate, type HourlySummaryEntry } from '@/lib/counterLogs';
+import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
 import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
+import { DowntimeTimeline } from '@/components/DowntimeTimeline';
 
 const REFRESH_MS = 1000;
 const SUMMARY_REFRESH_MS = 30000;
@@ -62,6 +64,8 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
   const [summary, setSummary] = useState<HourlySummaryEntry[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [downtimeEvents, setDowntimeEvents] = useState<DowntimeEvent[]>([]);
+  const [downtimeLoading, setDowntimeLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -117,6 +121,29 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
     return () => clearInterval(id);
   }, [loadSummary, date]);
 
+  const loadDowntime = useCallback(async (date: string) => {
+    setDowntimeLoading(true);
+    try {
+      const data = await fetchDowntimeByDate(date);
+      if (isOvernightShift(currentShift, customHours)) {
+        const nextData = await fetchDowntimeByDate(nextDateStr(date));
+        data.push(...nextData);
+      }
+      setDowntimeEvents(data);
+    } catch {
+      setDowntimeEvents([]);
+    } finally {
+      setDowntimeLoading(false);
+    }
+  }, [currentShift, customHours]);
+
+  useEffect(() => {
+    if (!date) return;
+    loadDowntime(date);
+    const id = setInterval(() => loadDowntime(date), SUMMARY_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [loadDowntime, date]);
+
   const job = status?.job;
   const order = job?.$order;
   const product = order?.$product;
@@ -160,6 +187,11 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
 
   const totalIn = useMemo(() => shiftSummary.reduce((s, e) => s + e.in, 0), [shiftSummary]);
   const totalOut = useMemo(() => shiftSummary.reduce((s, e) => s + e.out, 0), [shiftSummary]);
+
+  const shiftDowntimeEvents = useMemo(
+    () => filterByShiftWindow(downtimeEvents, currentShift, customHours, date, (e) => e.start_text),
+    [downtimeEvents, currentShift, customHours, date],
+  );
 
   return (
     <div>
@@ -259,6 +291,15 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
           </div>
         </div>
       </div>
+
+      <DowntimeTimeline
+        events={shiftDowntimeEvents}
+        currentShift={currentShift}
+        customHours={customHours}
+        date={date}
+        consoleTime={consoleTime}
+        loading={downtimeLoading}
+      />
 
       <div className="flex flex-wrap items-center gap-3 mb-4 text-[11px] font-semibold">
         {([
