@@ -73,7 +73,7 @@ export function DowntimeHistory({
       if (isOvernightShift(currentShift, customHours)) {
         const nextEvents = await fetchDowntimeByDate(nextDateStr(date));
         data.push(...nextEvents);
-        data.sort((a, b) => a.start_epoch - b.start_epoch);
+        data.sort((a, b) => b.start_epoch - a.start_epoch);
       }
       setEvents(data);
     } catch (err) {

@@ -269,7 +269,7 @@ function epochToConsoleTime(
       const nd = String(nextDate.getDate()).padStart(2, '0');
       const nextEvents = await fetchDowntimeByDate(`${ny}-${nm}-${nd}`);
       events.push(...nextEvents);
-      events.sort((a, b) => a.start_epoch - b.start_epoch);
+      events.sort((a, b) => b.start_epoch - a.start_epoch);
     }
     if (events.length === 0) {
       throw new Error(`No downtime events found in the database for ${date}.`);

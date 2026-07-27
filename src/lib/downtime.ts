@@ -210,7 +210,7 @@ export async function fetchDowntimeByDate(
     .map(spanToEvent);
 
   return [...downtimeEvents, ...setupEvents]
-    .sort((a, b) => a.start_epoch - b.start_epoch);
+    .sort((a, b) => b.start_epoch - a.start_epoch);
 }
 
 async function fetchSetupEventsFromDb(
@@ -223,7 +223,7 @@ async function fetchSetupEventsFromDb(
     .eq('downtime_type', 'SETUP')
     .gte('start_epoch', rangeStart)
     .lte('start_epoch', rangeEnd)
-    .order('start_epoch', { ascending: true });
+    .order('start_epoch', { ascending: false });
 
   if (error || !data) return [];
 
