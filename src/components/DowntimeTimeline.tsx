@@ -4,12 +4,12 @@ import { consoleTimeToShiftMinutes, getActiveHours, type Shift } from '@/types';
 import type { DowntimeEvent } from '@/lib/downtime';
 
 const TYPE_COLORS: Record<string, string> = {
-  UNPLANNED: '#ef4444',
-  PLANNED: '#3b82f6',
-  SETUP: '#f59e0b',
+  UNPLANNED: '#dc2626',
+  PLANNED: '#2563eb',
+  SETUP: '#eab308',
 };
 
-const RUNNING_COLOR = '#22c55e';
+const RUNNING_COLOR = '#16a34a';
 
 function getTypeColor(type: string | null): string {
   if (!type) return '#94a3b8';
@@ -147,56 +147,46 @@ export function DowntimeTimeline({
       }
     }
 
-    return {
-      blocks,
-      hourMarks,
-      nowPct,
-      runWidthPct: nowPct !== null ? nowPct : 100,
-      totalDowntimeMin,
-      eventCount: blocks.length,
-    };
+    const runWidthPct = nowPct !== null ? nowPct : 100;
+
+    return { blocks, hourMarks, nowPct, runWidthPct, totalDowntimeMin, eventCount: blocks.length };
   }, [events, currentShift, customHours, date, consoleTime]);
 
   return (
     <div className="mb-4 px-1">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-          Shift Timeline
-        </span>
-        {eventCount > 0 && (
-          <span className="text-[11px] font-medium text-slate-400">
-            <span className="font-bold text-red-500">{formatDurationShort(totalDowntimeMin)}</span>
-            {' '}downtime · {eventCount} {eventCount === 1 ? 'event' : 'events'}
-          </span>
-        )}
-      </div>
-
       {loading ? (
         <div className="flex items-center justify-center py-5 text-slate-300">
           <Loader2 size={16} className="animate-spin" />
         </div>
       ) : (
         <>
-          {/* Track */}
-          <div className="relative h-5 rounded-full overflow-hidden bg-slate-100 shadow-inner">
+          {/* Timeline track */}
+          <div className="relative h-9 rounded-md bg-slate-100 border border-slate-200 overflow-hidden">
             {/* Running / elapsed fill */}
             <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${runWidthPct}%`, backgroundColor: RUNNING_COLOR, opacity: 0.85 }}
+              className="absolute top-0 bottom-0"
+              style={{ left: '0%', width: `${runWidthPct}%`, backgroundColor: RUNNING_COLOR }}
             />
+
+            {/* Hour marks */}
+            {hourMarks.map((m, i) => (
+              <div
+                key={i}
+                className="absolute top-0 bottom-0 w-px bg-white/40 z-[5] pointer-events-none"
+                style={{ left: `${m.pct}%` }}
+              />
+            ))}
 
             {/* Downtime blocks */}
             {blocks.map((b, i) => (
               <div
                 key={i}
-                className="absolute inset-y-0.5 rounded-full cursor-default transition-opacity hover:opacity-100"
+                className="absolute top-0 bottom-0 cursor-default transition-opacity"
                 style={{
                   left: `${b.leftPct}%`,
                   width: `${b.widthPct}%`,
                   backgroundColor: b.color,
-                  minWidth: '3px',
-                  opacity: 0.92,
+                  minWidth: '2px',
                 }}
                 title={`${b.label} · ${b.durationLabel}`}
               />
@@ -205,18 +195,18 @@ export function DowntimeTimeline({
             {/* Now needle */}
             {nowPct !== null && (
               <div
-                className="absolute inset-y-0 w-px bg-white/70 z-10 pointer-events-none"
+                className="absolute top-0 bottom-0 w-0.5 bg-slate-700 z-10 pointer-events-none"
                 style={{ left: `${nowPct}%` }}
               />
             )}
           </div>
 
-          {/* Hour labels below */}
+          {/* Hour labels */}
           <div className="relative h-4 mt-1">
             {hourMarks.map((m, i) => (
               <span
                 key={i}
-                className="absolute text-[9px] font-medium text-slate-400 -translate-x-1/2 whitespace-nowrap"
+                className="absolute text-[10px] font-medium text-slate-400 -translate-x-1/2 whitespace-nowrap"
                 style={{ left: `${m.pct}%` }}
               >
                 {m.label}
@@ -225,7 +215,7 @@ export function DowntimeTimeline({
           </div>
 
           {eventCount === 0 && (
-            <p className="text-[11px] text-slate-400 font-medium mt-0.5 m-0">
+            <p className="text-[11px] text-slate-400 font-medium mt-1 m-0">
               No downtime this shift.
             </p>
           )}
