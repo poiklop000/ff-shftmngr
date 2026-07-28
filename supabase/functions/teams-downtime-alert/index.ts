@@ -1,11 +1,10 @@
-// teams-downtime-alert — sends a Microsoft Teams notification when a downtime
-// event crosses the 10-minute threshold.
+// teams-downtime-alert — sends a Microsoft Teams notification as soon as a
+// downtime event is detected.
 //
 // Designed to run on a schedule (every minute via pg_cron). On each run it:
-//   1. Finds unresolved downtime events whose duration >= 10 minutes
-//   2. Filters out events already alerted (alert_sent = true)
-//   3. Posts an Adaptive Card message to Teams via an incoming webhook URL
-//   4. Marks each alerted event so it won't be sent again
+//   1. Finds all unresolved downtime events that haven't been alerted yet
+//   2. Posts a message to Teams via an incoming webhook URL
+//   3. Marks each alerted event so it won't be sent again
 //
 // The webhook URL and enabled toggle are stored in the app_config table so they
 // can be changed from the app's settings UI without redeploying.
@@ -16,8 +15,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
-
-const ALERT_THRESHOLD_MIN = 10;
 
 interface DowntimeRow {
   id: number;
@@ -57,7 +54,7 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
 
   const text =
     `Downtime Alert — ${lineName}\n` +
-    `${typeLabel} downtime has exceeded ${ALERT_THRESHOLD_MIN} minutes.\n\n` +
+    `${typeLabel} downtime has occurred.\n\n` +
     `**Reason:** ${reason}\n` +
     `**Category:** ${category}\n` +
     `**Duration:** ${formatDuration(durationMs)}\n` +
@@ -120,32 +117,25 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, skipped: true, alerted: 0, webhookConfigured: !!webhookUrl, enabled });
     }
 
-    // Find unresolved events past the threshold that haven't been alerted yet
-    const thresholdMs = ALERT_THRESHOLD_MIN * 60 * 1000;
-    const now = Date.now();
-
+    // Find all unresolved events that haven't been alerted yet
     const { data: events, error } = await supabase
       .from("downtime_events")
       .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name")
       .eq("resolved", false)
-      .eq("alert_sent", false);
+      .eq("alert_sent", false)
+      .order("start_epoch", { ascending: false });
 
     if (error) throw new Error(error.message);
 
-    const overdue = (events ?? []).filter((e: DowntimeRow) => {
-      const dur = e.duration_ms ?? (now - e.start_epoch);
-      return dur >= thresholdMs;
-    });
-
-    if (overdue.length === 0) {
-      console.log(`[teams-downtime-alert] ${new Date().toISOString()} no overdue events`);
+    if (!events || events.length === 0) {
+      console.log(`[teams-downtime-alert] ${new Date().toISOString()} no unalerted events`);
       return json({ ok: true, alerted: 0 });
     }
 
     let alertedCount = 0;
     const failed: number[] = [];
 
-    for (const evt of overdue) {
+    for (const evt of events) {
       const payload = buildTeamsMessage(evt);
       const sent = await sendTeams(webhookUrl, payload);
       if (sent) {
