@@ -37,10 +37,27 @@ export default function App() {
   });
   const [data, setData] = useState<AppData>(() => loadAppData());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     saveAppData(data);
   }, [data]);
+
+  // Hide the bottom nav bar when the mobile soft keyboard opens so it
+  // doesn't cover the input the user is typing into.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const threshold = 150;
+    const update = () => setKeyboardOpen(window.innerHeight - vv.height > threshold);
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(VIEW_KEY, view);
@@ -364,7 +381,7 @@ function epochToConsoleTime(
         </div>
       </div>
 
-      <nav className="bottom-tab-bar" aria-label="Section navigation">
+      <nav className={`bottom-tab-bar${keyboardOpen ? ' bottom-tab-bar-hidden' : ''}`} aria-label="Section navigation" aria-hidden={keyboardOpen}>
         <span className="bottom-tab-indicator" style={{ ['--i' as string]: String(((['live','tracker','downtime','calculator'] as const).indexOf(view))) }} aria-hidden="true" />
         {([
           { id: 'live', label: 'Live', Icon: Activity },

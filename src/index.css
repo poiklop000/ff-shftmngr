@@ -188,6 +188,12 @@ html {
   margin-bottom: env(safe-area-inset-bottom);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+.bottom-tab-bar-hidden {
+  transform: translateX(-50%) translateY(200%);
+  opacity: 0;
+  pointer-events: none;
 }
 .bottom-tab-indicator {
   position: absolute;
