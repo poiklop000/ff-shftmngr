@@ -365,12 +365,12 @@ function epochToConsoleTime(
       </div>
 
       <nav className="bottom-tab-bar" aria-label="Section navigation">
-        <span className="bottom-tab-indicator" style={{ ['--i' as string]: String(((['calculator','tracker','live','downtime'] as const).indexOf(view))) }} aria-hidden="true" />
+        <span className="bottom-tab-indicator" style={{ ['--i' as string]: String(((['live','tracker','downtime','calculator'] as const).indexOf(view))) }} aria-hidden="true" />
         {([
-          { id: 'calculator', label: 'Calculator', Icon: Calculator },
-          { id: 'tracker', label: 'Monitoring', Icon: ClipboardList },
           { id: 'live', label: 'Live', Icon: Activity },
+          { id: 'tracker', label: 'Monitoring', Icon: ClipboardList },
           { id: 'downtime', label: 'Downtime', Icon: TimerOff },
+          { id: 'calculator', label: 'Calculator', Icon: Calculator },
         ] as const).map(({ id, label, Icon }) => (
           <button
             key={id}
