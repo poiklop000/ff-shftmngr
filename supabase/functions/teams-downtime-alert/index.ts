@@ -57,24 +57,47 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
   const status = evt.resolved ? "ENDED" : "ONGOING";
 
-  const lines: string[] = [
-    `Downtime Alert — ${lineName}`,
-    `${typeLabel} downtime is ${status}.`,
-    `Reason: ${reason}`,
-    `Category: ${category}`,
-    `Duration: ${formatDuration(durationMs)}`,
-    `Started: ${startTime}`,
+  const facts: { title: string; value: string }[] = [
+    { title: "Reason:", value: reason },
+    { title: "Category:", value: category },
+    { title: "Duration:", value: formatDuration(durationMs) },
+    { title: "Started:", value: startTime },
   ];
 
   if (evt.crew_name) {
-    lines.push(`Crew: ${evt.crew_name}`);
+    facts.push({ title: "Crew:", value: evt.crew_name });
   }
 
-  lines.push("— Sent automatically by Free-Flow Shift Manager Console");
-
   return {
-    type: "message",
-    text: lines.join("\n"),
+    type: "AdaptiveCard",
+    $schema: "http://adaptivecards.io/schemas/AdaptiveCard.json",
+    version: "1.4",
+    body: [
+      {
+        type: "TextBlock",
+        text: `Downtime Alert — ${lineName}`,
+        weight: "Bolder",
+        size: "Large",
+      },
+      {
+        type: "TextBlock",
+        text: `${typeLabel} downtime is ${status}.`,
+        wrap: true,
+        color: "Attention",
+        weight: "Bolder",
+      },
+      {
+        type: "FactSet",
+        facts,
+      },
+      {
+        type: "TextBlock",
+        text: "— Sent automatically by Free-Flow Shift Manager Console",
+        wrap: true,
+        isSubtle: true,
+        size: "Small",
+      },
+    ],
   };
 }
 
