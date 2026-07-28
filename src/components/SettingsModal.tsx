@@ -25,12 +25,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         const { data: webhookRow } = await supabase
           .from('app_config')
           .select('value')
-          .eq('key', 'slack_webhook_url')
+          .eq('key', 'teams_webhook_url')
           .maybeSingle();
         const { data: enabledRow } = await supabase
           .from('app_config')
           .select('value')
-          .eq('key', 'slack_alerts_enabled')
+          .eq('key', 'teams_alerts_enabled')
           .maybeSingle();
         if (cancelled) return;
         setWebhookUrl(webhookRow?.value ?? '');
@@ -47,7 +47,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const handleSave = useCallback(async () => {
     const trimmed = webhookUrl.trim();
     if (enabled && !trimmed) {
-      setError('Paste a Slack webhook URL before enabling alerts.');
+      setError('Paste a Microsoft Teams webhook URL before enabling alerts.');
       return;
     }
     setSaving(true);
@@ -56,11 +56,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     try {
       const { error: webhookErr } = await supabase
         .from('app_config')
-        .upsert({ key: 'slack_webhook_url', value: trimmed }, { onConflict: 'key' });
+        .upsert({ key: 'teams_webhook_url', value: trimmed }, { onConflict: 'key' });
       if (webhookErr) throw new Error(webhookErr.message);
       const { error: enabledErr } = await supabase
         .from('app_config')
-        .upsert({ key: 'slack_alerts_enabled', value: String(enabled) }, { onConflict: 'key' });
+        .upsert({ key: 'teams_alerts_enabled', value: String(enabled) }, { onConflict: 'key' });
       if (enabledErr) throw new Error(enabledErr.message);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -77,7 +77,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Slack Alert Settings</h2>
+          <h2>Microsoft Teams Alert Settings</h2>
           <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>
@@ -88,31 +88,31 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         ) : (
           <>
             <p className="modal-description">
-              Get a Slack message when a downtime event lasts longer than 10 minutes.
-              Create an incoming webhook in Slack (Apps → Incoming Webhooks), pick a channel,
-              and paste the URL below.
+              Get a Microsoft Teams message when a downtime event lasts longer than 10 minutes.
+              Create an incoming webhook in your Teams channel (Apps → Workflows → Post to a channel
+              when a webhook request is received), pick a channel, and paste the URL below.
             </p>
 
             <div className="input-group" style={{ maxWidth: '100%' }}>
-              <label htmlFor="slack-webhook">Slack Webhook URL</label>
+              <label htmlFor="teams-webhook">Microsoft Teams Webhook URL</label>
               <input
-                id="slack-webhook"
+                id="teams-webhook"
                 type="url"
                 className="form-control"
-                placeholder="https://hooks.slack.com/services/…"
+                placeholder="https://*.webhook.office.com/webhookb2/…"
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
               />
             </div>
 
             <label className="modal-toggle-row">
-              <span>Enable Slack alerts</span>
+              <span>Enable Microsoft Teams alerts</span>
               <button
                 type="button"
                 className={`toggle-switch ${enabled ? 'on' : ''}`}
                 onClick={() => setEnabled((v) => !v)}
                 aria-pressed={enabled}
-                aria-label="Toggle Slack alerts"
+                aria-label="Toggle Microsoft Teams alerts"
               >
                 <span className="toggle-switch-knob" />
               </button>

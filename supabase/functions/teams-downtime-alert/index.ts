@@ -1,14 +1,14 @@
-// slack-downtime-alert — sends a Slack notification when a downtime event
-// crosses the 10-minute threshold.
+// teams-downtime-alert — sends a Microsoft Teams notification when a downtime
+// event crosses the 10-minute threshold.
 //
 // Designed to run on a schedule (every minute via pg_cron). On each run it:
 //   1. Finds unresolved downtime events whose duration >= 10 minutes
-//   2. Filters out events already alerted (slack_alerted = true)
-//   3. Posts a message to Slack via an incoming webhook URL
+//   2. Filters out events already alerted (alert_sent = true)
+//   3. Posts an Adaptive Card message to Teams via an incoming webhook URL
 //   4. Marks each alerted event so it won't be sent again
 //
-// The webhook URL and threshold are stored in the app_config table so they can
-// be changed from the app's settings UI without redeploying.
+// The webhook URL and enabled toggle are stored in the app_config table so they
+// can be changed from the app's settings UI without redeploying.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -46,40 +46,71 @@ function formatDuration(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function buildSlackMessage(evt: DowntimeRow): Record<string, unknown> {
+function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
   const durationMs = evt.duration_ms ?? (Date.now() - evt.start_epoch);
   const lineName = evt.console_name ?? "Production Line";
   const typeLabel = evt.downtime_type ?? "Downtime";
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
-  const crew = evt.crew_name ? ` | Crew: ${evt.crew_name}` : "";
+  const crew = evt.crew_name ? `\\n\\n**Crew:** ${evt.crew_name}` : "";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
 
   return {
-    text: `Downtime Alert — ${lineName}`,
-    blocks: [
+    type: "message",
+    attachments: [
       {
-        type: "header",
-        text: { type: "plain_text", text: `Downtime Alert — ${lineName}` },
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*${typeLabel}* downtime has exceeded *${ALERT_THRESHOLD_MIN} minutes*.\n\n*Reason:* ${reason}\n*Category:* ${category}\n*Duration:* ${formatDuration(durationMs)}\n*Started:* ${startTime}${crew}`,
+        contentType: "application/vnd.microsoft.card.adaptive",
+        contentUrl: "",
+        content: {
+          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+          type: "AdaptiveCard",
+          version: "1.4",
+          msteams: { width: "Full" },
+          body: [
+            {
+              type: "TextBlock",
+              text: `Downtime Alert — ${lineName}`,
+              size: "Large",
+              weight: "Bolder",
+              color: "Attention",
+              wrap: true,
+            },
+            {
+              type: "FactSet",
+              facts: [
+                { title: "Type", value: typeLabel },
+                { title: "Threshold", value: `${ALERT_THRESHOLD_MIN} minutes exceeded` },
+                { title: "Reason", value: reason },
+                { title: "Category", value: category },
+                { title: "Duration", value: formatDuration(durationMs) },
+                { title: "Started", value: startTime },
+              ],
+            },
+            {
+              type: "TextBlock",
+              text: `**Crew:** ${evt.crew_name ?? "—"}`,
+              isSubtle: true,
+              wrap: true,
+            },
+            {
+              type: "TextBlock",
+              text: "Sent automatically by Free-Flow Shift Manager Console",
+              isSubtle: true,
+              spacing: "Small",
+              size: "Small",
+              wrap: true,
+            },
+          ],
         },
-      },
-      {
-        type: "context",
-        elements: [
-          { type: "mrkdwn", text: "Sent automatically by Free-Flow Shift Manager Console" },
-        ],
       },
     ],
   };
 }
 
-async function sendSlack(webhookUrl: string, payload: Record<string, unknown>): Promise<boolean> {
+async function sendTeams(
+  webhookUrl: string,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -110,7 +141,7 @@ Deno.serve(async (req: Request) => {
     const { data: cfgRow } = await supabase
       .from("app_config")
       .select("value")
-      .eq("key", "slack_webhook_url")
+      .eq("key", "teams_webhook_url")
       .maybeSingle();
     const webhookUrl = cfgRow?.value?.trim();
 
@@ -118,13 +149,13 @@ Deno.serve(async (req: Request) => {
     const { data: enabledRow } = await supabase
       .from("app_config")
       .select("value")
-      .eq("key", "slack_alerts_enabled")
+      .eq("key", "teams_alerts_enabled")
       .maybeSingle();
     const enabled = enabledRow?.value?.toLowerCase() === "true";
 
     if (!webhookUrl || !enabled) {
       console.log(
-        `[slack-downtime-alert] ${new Date().toISOString()} skipped — webhook: ${!!webhookUrl}, enabled: ${enabled}`,
+        `[teams-downtime-alert] ${new Date().toISOString()} skipped — webhook: ${!!webhookUrl}, enabled: ${enabled}`,
       );
       return json({ ok: true, skipped: true, alerted: 0, webhookConfigured: !!webhookUrl, enabled });
     }
@@ -137,7 +168,7 @@ Deno.serve(async (req: Request) => {
       .from("downtime_events")
       .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name")
       .eq("resolved", false)
-      .eq("slack_alerted", false);
+      .eq("alert_sent", false);
 
     if (error) throw new Error(error.message);
 
@@ -147,7 +178,7 @@ Deno.serve(async (req: Request) => {
     });
 
     if (overdue.length === 0) {
-      console.log(`[slack-downtime-alert] ${new Date().toISOString()} no overdue events`);
+      console.log(`[teams-downtime-alert] ${new Date().toISOString()} no overdue events`);
       return json({ ok: true, alerted: 0 });
     }
 
@@ -155,12 +186,12 @@ Deno.serve(async (req: Request) => {
     const failed: number[] = [];
 
     for (const evt of overdue) {
-      const payload = buildSlackMessage(evt);
-      const sent = await sendSlack(webhookUrl, payload);
+      const payload = buildTeamsMessage(evt);
+      const sent = await sendTeams(webhookUrl, payload);
       if (sent) {
         await supabase
           .from("downtime_events")
-          .update({ slack_alerted: true, updated_at: new Date().toISOString() })
+          .update({ alert_sent: true, updated_at: new Date().toISOString() })
           .eq("id", evt.id);
         alertedCount++;
       } else {
@@ -169,12 +200,12 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(
-      `[slack-downtime-alert] ${new Date().toISOString()} alerted=${alertedCount} failed=${failed.length}`,
+      `[teams-downtime-alert] ${new Date().toISOString()} alerted=${alertedCount} failed=${failed.length}`,
     );
     return json({ ok: true, alerted: alertedCount, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[slack-downtime-alert] ${new Date().toISOString()} error:`, message);
+    console.error(`[teams-downtime-alert] ${new Date().toISOString()} error:`, message);
     return json({ ok: false, error: message }, 502);
   }
 });
