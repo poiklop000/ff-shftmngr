@@ -554,7 +554,7 @@ tbody tr:hover { background-color: #eff6ff; }
 
 /* ---- Footer ---- */
 .footer {
-  text-align: center;
+  text-align: left;
   padding: 20px;
   color: #64748b;
   font-size: 11px;
