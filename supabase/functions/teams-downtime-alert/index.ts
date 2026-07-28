@@ -161,7 +161,7 @@ Deno.serve(async (req: Request) => {
       .eq("key", "teams_alert_threshold_minutes")
       .maybeSingle();
     const thresholdMinutes = Number(thresholdRow?.value);
-    const thresholdMs = (Number.isFinite(thresholdMinutes) && thresholdMinutes > 0
+    const thresholdMs = (Number.isFinite(thresholdMinutes) && thresholdMinutes >= 0
       ? thresholdMinutes
       : 10) * 60_000;
 
