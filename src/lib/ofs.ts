@@ -184,9 +184,11 @@ export function classifyLineState(runstate: OfsRunState | undefined): LineStateC
   const state = runstate?.state?.toLowerCase() ?? '';
   // Order matters: a single state string can contain multiple keywords.
   // "job.setup.running" contains both "setup" and "running", so setup must
-  // be checked before running. Planned downtime states contain "downtime"
-  // too, so "planned" must be checked before "downtime".
+  // be checked before running. "unplanned" contains the substring "planned",
+  // so it must be checked before "planned" to avoid misclassifying unplanned
+  // downtime as planned (blue instead of red).
   if (state.includes('setup')) return 'setup';
+  if (state.includes('unplanned')) return 'downtime';
   if (state.includes('planned')) return 'planned';
   if (state.includes('downtime')) return 'downtime';
   if (state.includes('running')) return 'running';
