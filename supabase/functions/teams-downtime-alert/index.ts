@@ -51,16 +51,41 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
   const category = evt.category ?? "Uncategorised";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
 
-  const facts: { title: string; value: string }[] = [
-    { title: "Reason", value: reason },
-    { title: "Category", value: category },
-    { title: "Duration", value: formatDuration(durationMs) },
-    { title: "Started", value: startTime },
+  const detailLines: TextBlockDef[] = [
+    { text: `Reason: ${reason}` },
+    { text: `Category: ${category}` },
+    { text: `Duration: ${formatDuration(durationMs)}` },
+    { text: `Started: ${startTime}` },
   ];
 
   if (evt.crew_name) {
-    facts.push({ title: "Crew", value: evt.crew_name });
+    detailLines.push({ text: `Crew: ${evt.crew_name}` });
   }
+
+  const body: TextBlockDef[] = [
+    {
+      text: `Downtime Alert — ${lineName}`,
+      size: "Large",
+      weight: "Bolder",
+      color: "Attention",
+      wrap: true,
+    },
+    {
+      text: `${typeLabel} downtime has occurred.`,
+      size: "Medium",
+      color: "Warning",
+      wrap: true,
+      spacing: "Small",
+    },
+    ...detailLines.map((d) => ({ ...d, size: "Default" as const, wrap: true, spacing: "Small" as const })),
+    {
+      text: "Sent automatically by Free-Flow Shift Manager Console",
+      size: "Small",
+      isSubtle: true,
+      wrap: true,
+      spacing: "Medium",
+    },
+  ];
 
   return {
     type: "message",
@@ -71,40 +96,21 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         type: "AdaptiveCard",
         version: "1.4",
-        body: [
-          {
-            type: "TextBlock",
-            text: `Downtime Alert — ${lineName}`,
-            size: "Large",
-            weight: "Bolder",
-            color: "Attention",
-            wrap: true,
-          },
-          {
-            type: "TextBlock",
-            text: `${typeLabel} downtime has occurred.`,
-            size: "Medium",
-            color: "Warning",
-            wrap: true,
-            spacing: "Small",
-          },
-          {
-            type: "FactSet",
-            facts,
-            spacing: "Medium",
-          },
-          {
-            type: "TextBlock",
-            text: "Sent automatically by Free-Flow Shift Manager Console",
-            size: "Small",
-            isSubtle: true,
-            wrap: true,
-            spacing: "Medium",
-          },
-        ],
+        body,
       },
     }],
   };
+}
+
+interface TextBlockDef {
+  text: string;
+  type?: string;
+  size?: string;
+  weight?: string;
+  color?: string;
+  wrap?: boolean;
+  spacing?: string;
+  isSubtle?: boolean;
 }
 
 async function sendTeams(
