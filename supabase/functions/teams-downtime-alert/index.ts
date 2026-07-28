@@ -47,16 +47,40 @@ function formatDuration(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+// Color-code alerts by downtime type so they are visually distinguishable in Teams.
+//   UNPLANNED — Attention (red)   — unexpected breakdowns, highest urgency
+//   PLANNED    — Warning (orange)  — scheduled maintenance / planned stops
+//   SETUP      — Accent (blue)     — product changeovers / format setups
+//   default    — Default (grey)
+interface TypeStyle {
+  color: "Attention" | "Warning" | "Accent" | "Default";
+  label: string;
+}
+
+function typeStyle(downtimeType: string | null): TypeStyle {
+  switch ((downtimeType ?? "").toUpperCase()) {
+    case "UNPLANNED":
+      return { color: "Attention", label: "Unplanned Downtime" };
+    case "PLANNED":
+      return { color: "Warning", label: "Planned Downtime" };
+    case "SETUP":
+      return { color: "Accent", label: "Setup / Changeover" };
+    default:
+      return { color: "Default", label: downtimeType ?? "Downtime" };
+  }
+}
+
 function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
   const nowMs = Date.now();
   const durationMs = evt.duration_ms ?? (nowMs - evt.start_epoch);
   const lineName = evt.console_name ?? "Production Line";
-  const typeLabel = evt.downtime_type ?? "Downtime";
+  const style = typeStyle(evt.downtime_type);
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
 
   const facts: { title: string; value: string }[] = [
+    { title: "Type:", value: style.label },
     { title: "Reason:", value: reason },
     { title: "Category:", value: category },
     { title: "Duration so far:", value: formatDuration(durationMs) },
@@ -68,8 +92,8 @@ function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
     type: "AdaptiveCard",
     version: "1.2",
     body: [
-      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large" },
-      { type: "TextBlock", text: `${typeLabel} downtime is ONGOING.`, wrap: true, color: "Attention", weight: "Bolder" },
+      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large", color: style.color },
+      { type: "TextBlock", text: `${style.label} is ONGOING.`, wrap: true, color: style.color, weight: "Bolder" },
       { type: "FactSet", facts },
       { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
     ],
@@ -79,13 +103,14 @@ function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
 function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
   const durationMs = evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0);
   const lineName = evt.console_name ?? "Production Line";
-  const typeLabel = evt.downtime_type ?? "Downtime";
+  const style = typeStyle(evt.downtime_type);
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
   const endTime = evt.end_epoch ? new Date(evt.end_epoch).toISOString() : "Unknown";
 
   const facts: { title: string; value: string }[] = [
+    { title: "Type:", value: style.label },
     { title: "Reason:", value: reason },
     { title: "Category:", value: category },
     { title: "Total duration:", value: formatDuration(durationMs) },
@@ -98,8 +123,8 @@ function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
     type: "AdaptiveCard",
     version: "1.2",
     body: [
-      { type: "TextBlock", text: `Downtime Resolved — ${lineName}`, weight: "Bolder", size: "Large" },
-      { type: "TextBlock", text: `${typeLabel} downtime has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
+      { type: "TextBlock", text: `Downtime Resolved — ${lineName}`, weight: "Bolder", size: "Large", color: "Good" },
+      { type: "TextBlock", text: `${style.label} has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
       { type: "FactSet", facts },
       { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
     ],
