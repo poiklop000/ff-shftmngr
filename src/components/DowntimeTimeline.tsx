@@ -43,17 +43,40 @@ function computeNowPct(
   totalMin: number,
 ): number | null {
   if (!consoleTime || consoleTime === '-') return null;
-  const dateMatch = consoleTime.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (dateMatch && dateMatch[1] !== shiftDate) return null;
   const timeMatch = consoleTime.match(/(\d{1,2}):(\d{2})/);
   if (!timeMatch) return null;
   const h = parseInt(timeMatch[1], 10);
   const m = parseInt(timeMatch[2], 10);
   const minOfDay = h * 60 + m;
+
+  const isOvernight = shiftEndMin > 1440;
   let shiftMin = minOfDay;
-  if (shiftEndMin > 1440 && minOfDay < shiftStartMin) {
+
+  const dateMatch = consoleTime.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (dateMatch) {
+    const consoleDate = dateMatch[1]!;
+    if (consoleDate === shiftDate) {
+      if (isOvernight && minOfDay < shiftStartMin) {
+        shiftMin = minOfDay + 1440;
+      }
+    } else if (isOvernight) {
+      const [sy, sm, sd] = shiftDate.split('-').map(Number);
+      const [ey, em, ed] = consoleDate.split('-').map(Number);
+      const dayDiff = Math.round(
+        (Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86_400_000,
+      );
+      if (dayDiff === 1) {
+        shiftMin = minOfDay + 1440;
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  } else if (isOvernight && minOfDay < shiftStartMin) {
     shiftMin = minOfDay + 1440;
   }
+
   if (shiftMin < shiftStartMin || shiftMin > shiftEndMin) return null;
   return ((shiftMin - shiftStartMin) / totalMin) * 100;
 }
