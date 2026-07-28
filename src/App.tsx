@@ -33,7 +33,7 @@ const VALID_VIEWS: View[] = ['calculator', 'tracker', 'live', 'downtime'];
 export default function App() {
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem(VIEW_KEY) as View | null;
-    return saved && VALID_VIEWS.includes(saved) ? saved : 'calculator';
+    return saved && VALID_VIEWS.includes(saved) ? saved : 'live';
   });
   const [data, setData] = useState<AppData>(() => loadAppData());
   const [settingsOpen, setSettingsOpen] = useState(false);
