@@ -54,16 +54,18 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     setError(null);
     setSaved(false);
     try {
-      await supabase
+      const { error: webhookErr } = await supabase
         .from('app_config')
-        .upsert({ key: 'slack_webhook_url', value: trimmed });
-      await supabase
+        .upsert({ key: 'slack_webhook_url', value: trimmed }, { onConflict: 'key' });
+      if (webhookErr) throw new Error(webhookErr.message);
+      const { error: enabledErr } = await supabase
         .from('app_config')
-        .upsert({ key: 'slack_alerts_enabled', value: String(enabled) });
+        .upsert({ key: 'slack_alerts_enabled', value: String(enabled) }, { onConflict: 'key' });
+      if (enabledErr) throw new Error(enabledErr.message);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      setError('Could not save settings. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save settings. Please try again.');
     } finally {
       setSaving(false);
     }
