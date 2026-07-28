@@ -49,9 +49,10 @@ function formatDuration(ms: number): string {
 
 // Color-code alerts by downtime type so they are visually distinguishable in Teams.
 //   UNPLANNED — Attention (red)   — unexpected breakdowns, highest urgency
-//   PLANNED    — Warning (orange)  — scheduled maintenance / planned stops
-//   SETUP      — Accent (blue)     — product changeovers / format setups
+//   PLANNED    — Accent (blue)     — scheduled maintenance / planned stops
+//   SETUP      — Warning (yellow)  — product changeovers / format setups
 //   default    — Default (grey)
+// Resolved alerts always render in Good (green) regardless of type.
 interface TypeStyle {
   color: "Attention" | "Warning" | "Accent" | "Default";
   label: string;
@@ -62,9 +63,9 @@ function typeStyle(downtimeType: string | null): TypeStyle {
     case "UNPLANNED":
       return { color: "Attention", label: "Unplanned Downtime" };
     case "PLANNED":
-      return { color: "Warning", label: "Planned Downtime" };
+      return { color: "Accent", label: "Planned Downtime" };
     case "SETUP":
-      return { color: "Accent", label: "Setup / Changeover" };
+      return { color: "Warning", label: "Setup / Changeover" };
     default:
       return { color: "Default", label: downtimeType ?? "Downtime" };
   }
