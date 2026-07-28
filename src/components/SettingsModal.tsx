@@ -102,7 +102,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         ) : (
           <>
             <p className="modal-description">
-              Get a Microsoft Teams message when a downtime event lasts longer than 10 minutes.
+              Get a Microsoft Teams message when a downtime event starts and when it ends.
               Create an incoming webhook in your Teams channel (Apps → Workflows → Post to a channel
               when a webhook request is received), pick a channel, and paste the URL below.
             </p>
@@ -131,7 +131,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 onChange={(e) => setThreshold(e.target.value)}
               />
               <small style={{ display: 'block', marginTop: 6, color: 'var(--text-muted, #888)', fontSize: 12 }}>
-                Alerts are only sent once a downtime has been ongoing for at least this many minutes.
+                Two alerts are sent: one when downtime starts and one when it ends. Alerts are only sent if the downtime lasts at least this many minutes.
               </small>
             </div>
 

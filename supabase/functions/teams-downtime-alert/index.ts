@@ -1,13 +1,13 @@
-// teams-downtime-alert — sends a Microsoft Teams notification as soon as a
-// downtime event is detected.
+// teams-downtime-alert — sends Microsoft Teams notifications for downtime events.
 //
-// Designed to run on a schedule (every minute via pg_cron). On each run it:
-//   1. Finds all unresolved downtime events that haven't been alerted yet
-//   2. Posts a message to Teams via an incoming webhook URL
-//   3. Marks each alerted event so it won't be sent again
+// Two alert types are supported:
+//   1. OCCURRED — sent when an unresolved downtime has been ongoing for at least
+//      the configured threshold. Tracked via the alert_sent column.
+//   2. RESOLVED — sent when a downtime event ends. Tracked via the
+//      resolved_alert_sent column. Only fires if the event lasted at least the
+//      threshold, and includes the total duration.
 //
-// The webhook URL and enabled toggle are stored in the app_config table so they
-// can be changed from the app's settings UI without redeploying.
+// Designed to run on a schedule (every minute via pg_cron).
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -28,6 +28,8 @@ interface DowntimeRow {
   crew_name: string | null;
   resolved: boolean | null;
   end_epoch: number | null;
+  alert_sent: boolean | null;
+  resolved_alert_sent: boolean | null;
 }
 
 function getSupabase() {
@@ -45,57 +47,61 @@ function formatDuration(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
+function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
   const nowMs = Date.now();
-  const durationMs = evt.resolved
-    ? (evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0))
-    : (evt.duration_ms ?? (nowMs - evt.start_epoch));
+  const durationMs = evt.duration_ms ?? (nowMs - evt.start_epoch);
   const lineName = evt.console_name ?? "Production Line";
   const typeLabel = evt.downtime_type ?? "Downtime";
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
-  const status = evt.resolved ? "ENDED" : "ONGOING";
 
   const facts: { title: string; value: string }[] = [
     { title: "Reason:", value: reason },
     { title: "Category:", value: category },
-    { title: "Duration:", value: formatDuration(durationMs) },
+    { title: "Duration so far:", value: formatDuration(durationMs) },
     { title: "Started:", value: startTime },
   ];
-
-  if (evt.crew_name) {
-    facts.push({ title: "Crew:", value: evt.crew_name });
-  }
+  if (evt.crew_name) facts.push({ title: "Crew:", value: evt.crew_name });
 
   return {
     type: "AdaptiveCard",
     version: "1.2",
     body: [
-      {
-        type: "TextBlock",
-        text: `Downtime Alert — ${lineName}`,
-        weight: "Bolder",
-        size: "Large",
-      },
-      {
-        type: "TextBlock",
-        text: `${typeLabel} downtime is ${status}.`,
-        wrap: true,
-        color: "Attention",
-        weight: "Bolder",
-      },
-      {
-        type: "FactSet",
-        facts,
-      },
-      {
-        type: "TextBlock",
-        text: "— Sent automatically by Free-Flow Shift Manager Console",
-        wrap: true,
-        isSubtle: true,
-        size: "Small",
-      },
+      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large" },
+      { type: "TextBlock", text: `${typeLabel} downtime is ONGOING.`, wrap: true, color: "Attention", weight: "Bolder" },
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
+    ],
+  };
+}
+
+function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
+  const durationMs = evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0);
+  const lineName = evt.console_name ?? "Production Line";
+  const typeLabel = evt.downtime_type ?? "Downtime";
+  const reason = evt.reason ?? "No reason recorded";
+  const category = evt.category ?? "Uncategorised";
+  const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
+  const endTime = evt.end_epoch ? new Date(evt.end_epoch).toISOString() : "Unknown";
+
+  const facts: { title: string; value: string }[] = [
+    { title: "Reason:", value: reason },
+    { title: "Category:", value: category },
+    { title: "Total duration:", value: formatDuration(durationMs) },
+    { title: "Started:", value: startTime },
+    { title: "Ended:", value: endTime },
+  ];
+  if (evt.crew_name) facts.push({ title: "Crew:", value: evt.crew_name });
+
+  return {
+    type: "AdaptiveCard",
+    version: "1.2",
+    body: [
+      { type: "TextBlock", text: `Downtime Resolved — ${lineName}`, weight: "Bolder", size: "Large" },
+      { type: "TextBlock", text: `${typeLabel} downtime has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
     ],
   };
 }
@@ -136,7 +142,6 @@ Deno.serve(async (req: Request) => {
   try {
     const supabase = getSupabase();
 
-    // Read webhook URL from app_config
     const { data: cfgRow } = await supabase
       .from("app_config")
       .select("value")
@@ -144,7 +149,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     const webhookUrl = cfgRow?.value?.trim();
 
-    // Read optional enabled flag (default to disabled if not set)
     const { data: enabledRow } = await supabase
       .from("app_config")
       .select("value")
@@ -152,9 +156,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     const enabled = enabledRow?.value?.toLowerCase() === "true";
 
-    // Read alert threshold in minutes (default 10). Alerts only fire once a
-    // downtime has been ongoing for at least this long, so short blips don't
-    // trigger a notification.
     const { data: thresholdRow } = await supabase
       .from("app_config")
       .select("value")
@@ -172,65 +173,86 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, skipped: true, alerted: 0, webhookConfigured: !!webhookUrl, enabled });
     }
 
-    // Find events that haven't been alerted yet. We include both:
-    //   1. Unresolved events ongoing for >= threshold minutes, AND
-    //   2. Recently-resolved events (resolved within the last 10 minutes)
-    //      whose total duration was >= threshold minutes.
-    // The second case catches downtimes that ended between cron ticks —
-    // without it, a 14-minute downtime that gets resolved by the sync job
-    // before this alert job runs would never trigger a notification.
     const nowMs = Date.now();
-    // For resolved events, only consider those that ended within the last
-    // 10 minutes — this avoids re-sending alerts for old historical events
-    // while still catching downtimes that ended between cron ticks.
     const recentEndCutoffMs = nowMs - 10 * 60_000;
 
+    // Fetch events that need either an OCCURRED or RESOLVED alert.
+    // Conditions:
+    //   - OCCURRED alert needed: alert_sent = false AND unresolved AND ongoing >= threshold
+    //   - RESOLVED alert needed: resolved_alert_sent = false AND resolved AND ended recently
+    //     AND total duration >= threshold
     const { data: events, error } = await supabase
       .from("downtime_events")
-      .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name, resolved, end_epoch")
-      .eq("alert_sent", false)
-      .or(`and(resolved.eq.false),and(resolved.eq.true,end_epoch.gte.${recentEndCutoffMs})`)
+      .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name, resolved, end_epoch, alert_sent, resolved_alert_sent")
+      .or(`and(alert_sent.eq.false,resolved.eq.false),and(resolved_alert_sent.eq.false,resolved.eq.true,end_epoch.gte.${recentEndCutoffMs})`)
       .order("start_epoch", { ascending: false });
 
     if (error) throw new Error(error.message);
 
     if (!events || events.length === 0) {
-      console.log(`[teams-downtime-alert] ${new Date().toISOString()} no unalerted events`);
+      console.log(`[teams-downtime-alert] ${new Date().toISOString()} no events needing alerts`);
       return json({ ok: true, alerted: 0 });
     }
 
-    let alertedCount = 0;
+    let occurredCount = 0;
+    let resolvedCount = 0;
     let skippedCount = 0;
     const failed: number[] = [];
 
     for (const evt of events) {
-      // Only alert once the downtime has been ongoing for at least the
-      // configured threshold. For unresolved events we measure elapsed time
-      // from start to now; for resolved events we use the final duration.
+      const needsOccurred = !evt.alert_sent && !evt.resolved;
+      const needsResolved = !evt.resolved_alert_sent && evt.resolved;
+
+      if (!needsOccurred && !needsResolved) {
+        skippedCount++;
+        continue;
+      }
+
+      // Duration check
       const effectiveDurationMs = evt.resolved
         ? (evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0))
         : (nowMs - evt.start_epoch);
+
       if (effectiveDurationMs < thresholdMs) {
         skippedCount++;
         continue;
       }
-      const payload = buildTeamsMessage(evt);
-      const sent = await sendTeams(webhookUrl, payload);
-      if (sent) {
-        await supabase
-          .from("downtime_events")
-          .update({ alert_sent: true, updated_at: new Date().toISOString() })
-          .eq("id", evt.id);
-        alertedCount++;
-      } else {
-        failed.push(evt.id);
+
+      // Send the appropriate alert(s)
+      if (needsOccurred) {
+        const payload = buildOccurredMessage(evt);
+        const sent = await sendTeams(webhookUrl, payload);
+        if (sent) {
+          await supabase
+            .from("downtime_events")
+            .update({ alert_sent: true, updated_at: new Date().toISOString() })
+            .eq("id", evt.id);
+          occurredCount++;
+        } else {
+          failed.push(evt.id);
+        }
+      }
+
+      if (needsResolved) {
+        const payload = buildResolvedMessage(evt);
+        const sent = await sendTeams(webhookUrl, payload);
+        if (sent) {
+          await supabase
+            .from("downtime_events")
+            .update({ resolved_alert_sent: true, updated_at: new Date().toISOString() })
+            .eq("id", evt.id);
+          resolvedCount++;
+        } else {
+          failed.push(evt.id);
+        }
       }
     }
 
+    const totalAlerted = occurredCount + resolvedCount;
     console.log(
-      `[teams-downtime-alert] ${new Date().toISOString()} alerted=${alertedCount} skipped=${skippedCount} failed=${failed.length}`,
+      `[teams-downtime-alert] ${new Date().toISOString()} occurred=${occurredCount} resolved=${resolvedCount} skipped=${skippedCount} failed=${failed.length}`,
     );
-    return json({ ok: true, alerted: alertedCount, skipped: skippedCount, failed });
+    return json({ ok: true, alerted: totalAlerted, occurred: occurredCount, resolved: resolvedCount, skipped: skippedCount, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[teams-downtime-alert] ${new Date().toISOString()} error:`, message);
