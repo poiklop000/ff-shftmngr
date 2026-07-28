@@ -26,6 +26,8 @@ interface DowntimeRow {
   duration_ms: number | null;
   start_text: string | null;
   crew_name: string | null;
+  resolved: boolean | null;
+  end_epoch: number | null;
 }
 
 function getSupabase() {
@@ -44,73 +46,36 @@ function formatDuration(ms: number): string {
 }
 
 function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
-  const durationMs = evt.duration_ms ?? (Date.now() - evt.start_epoch);
+  const nowMs = Date.now();
+  const durationMs = evt.resolved
+    ? (evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0))
+    : (evt.duration_ms ?? (nowMs - evt.start_epoch));
   const lineName = evt.console_name ?? "Production Line";
   const typeLabel = evt.downtime_type ?? "Downtime";
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
+  const status = evt.resolved ? "ENDED" : "ONGOING";
 
-  const detailLines: TextBlockDef[] = [
-    { text: `Reason: ${reason}` },
-    { text: `Category: ${category}` },
-    { text: `Duration: ${formatDuration(durationMs)}` },
-    { text: `Started: ${startTime}` },
+  const lines: string[] = [
+    `Downtime Alert — ${lineName}`,
+    `${typeLabel} downtime is ${status}.`,
+    `Reason: ${reason}`,
+    `Category: ${category}`,
+    `Duration: ${formatDuration(durationMs)}`,
+    `Started: ${startTime}`,
   ];
 
   if (evt.crew_name) {
-    detailLines.push({ text: `Crew: ${evt.crew_name}` });
+    lines.push(`Crew: ${evt.crew_name}`);
   }
 
-  const body: TextBlockDef[] = [
-    {
-      text: `Downtime Alert — ${lineName}`,
-      size: "Large",
-      weight: "Bolder",
-      color: "Attention",
-      wrap: true,
-    },
-    {
-      text: `${typeLabel} downtime has occurred.`,
-      size: "Medium",
-      color: "Warning",
-      wrap: true,
-      spacing: "Small",
-    },
-    ...detailLines.map((d) => ({ ...d, size: "Default" as const, wrap: true, spacing: "Small" as const })),
-    {
-      text: "Sent automatically by Free-Flow Shift Manager Console",
-      size: "Small",
-      isSubtle: true,
-      wrap: true,
-      spacing: "Medium",
-    },
-  ];
+  lines.push("— Sent automatically by Free-Flow Shift Manager Console");
 
   return {
     type: "message",
-    attachments: [{
-      contentType: "application/vnd.microsoft.card.adaptive",
-      contentUrl: "",
-      content: {
-        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        type: "AdaptiveCard",
-        version: "1.4",
-        body,
-      },
-    }],
+    text: lines.join("\n"),
   };
-}
-
-interface TextBlockDef {
-  text: string;
-  type?: string;
-  size?: string;
-  weight?: string;
-  color?: string;
-  wrap?: boolean;
-  spacing?: string;
-  isSubtle?: boolean;
 }
 
 async function sendTeams(
@@ -122,6 +87,12 @@ async function sendTeams(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "<no body>");
+    console.error(
+      `[teams-downtime-alert] webhook POST failed: ${res.status} ${res.statusText} — ${body.slice(0, 300)}`,
+    );
+  }
   return res.ok;
 }
 
@@ -179,12 +150,24 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, skipped: true, alerted: 0, webhookConfigured: !!webhookUrl, enabled });
     }
 
-    // Find all unresolved events that haven't been alerted yet
+    // Find events that haven't been alerted yet. We include both:
+    //   1. Unresolved events ongoing for >= threshold minutes, AND
+    //   2. Recently-resolved events (resolved within the last 10 minutes)
+    //      whose total duration was >= threshold minutes.
+    // The second case catches downtimes that ended between cron ticks —
+    // without it, a 14-minute downtime that gets resolved by the sync job
+    // before this alert job runs would never trigger a notification.
+    const nowMs = Date.now();
+    // For resolved events, only consider those that ended within the last
+    // 10 minutes — this avoids re-sending alerts for old historical events
+    // while still catching downtimes that ended between cron ticks.
+    const recentEndCutoffMs = nowMs - 10 * 60_000;
+
     const { data: events, error } = await supabase
       .from("downtime_events")
-      .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name")
-      .eq("resolved", false)
+      .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name, resolved, end_epoch")
       .eq("alert_sent", false)
+      .or(`and(resolved.eq.false),and(resolved.eq.true,end_epoch.gte.${recentEndCutoffMs})`)
       .order("start_epoch", { ascending: false });
 
     if (error) throw new Error(error.message);
@@ -197,13 +180,15 @@ Deno.serve(async (req: Request) => {
     let alertedCount = 0;
     let skippedCount = 0;
     const failed: number[] = [];
-    const nowMs = Date.now();
 
     for (const evt of events) {
       // Only alert once the downtime has been ongoing for at least the
-      // configured threshold. Shorter events are skipped this pass and
-      // retried on the next cron tick if they're still unresolved.
-      if (nowMs - evt.start_epoch < thresholdMs) {
+      // configured threshold. For unresolved events we measure elapsed time
+      // from start to now; for resolved events we use the final duration.
+      const effectiveDurationMs = evt.resolved
+        ? (evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0))
+        : (nowMs - evt.start_epoch);
+      if (effectiveDurationMs < thresholdMs) {
         skippedCount++;
         continue;
       }
