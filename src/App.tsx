@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, ClipboardList, Activity, TimerOff } from 'lucide-react';
+import { Calculator, ClipboardList, Activity, TimerOff, Settings } from 'lucide-react';
 import { CalculatorView } from '@/components/CalculatorView';
 import { DowntimeHistory } from '@/components/DowntimeHistory';
 import { LiveLineStatus } from '@/components/LiveLineStatus';
 import { MonitoringView } from '@/components/MonitoringView';
+import { SettingsModal } from '@/components/SettingsModal';
 import {
   computeHourlyOutputs,
   computeDowntimeLogs,
@@ -35,6 +36,7 @@ export default function App() {
     return saved && VALID_VIEWS.includes(saved) ? saved : 'calculator';
   });
   const [data, setData] = useState<AppData>(() => loadAppData());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     saveAppData(data);
@@ -299,7 +301,19 @@ function epochToConsoleTime(
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', color: '#1e293b' }}>
-      <div className="app-bar">Free-Flow Manufacturing<br />Shift Manager Console<br />(Beta Testing)</div>
+      <div className="app-bar">
+        <div className="app-bar-inner">
+          <span className="app-bar-title">Free-Flow Manufacturing<br />Shift Manager Console<br />(Beta Testing)</span>
+          <button
+            type="button"
+            className="app-bar-settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+          >
+            <Settings size={22} />
+          </button>
+        </div>
+      </div>
 
       <div className="sm-container" style={{ paddingTop: 20, paddingBottom: 80 }}>
         {view === 'calculator' ? (
@@ -370,6 +384,8 @@ function epochToConsoleTime(
           </button>
         ))}
       </nav>
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
