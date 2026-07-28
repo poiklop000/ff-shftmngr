@@ -631,6 +631,75 @@ tbody tr:hover { background-color: #eff6ff; }
   .tab-btn { padding: 8px 14px; font-size: 12px; }
 }
 
+/* ---- Page help guide ---- */
+.page-help {
+  margin-bottom: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #eff6ff;
+  transition: box-shadow 0.2s;
+}
+.page-help:hover {
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.1);
+}
+.page-help-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+.page-help-toggle:hover { background-color: #dbeafe; }
+.page-help-chevron {
+  margin-left: auto;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #2563eb;
+}
+.page-help-chevron-open { transform: rotate(180deg); }
+.page-help-body {
+  padding: 4px 16px 16px 16px;
+}
+.page-help-intro {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #334155;
+  margin: 0 0 14px 0;
+}
+.page-help-section {
+  margin-bottom: 12px;
+}
+.page-help-section:last-child { margin-bottom: 0; }
+.page-help-section-title {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e3a8a;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.page-help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.page-help-list li {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #475569;
+}
+
 /* ---- Print styles ---- */
 .print-only { display: none !important; }
 

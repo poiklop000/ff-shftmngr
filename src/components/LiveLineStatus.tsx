@@ -17,6 +17,7 @@ import { fetchHourlySummaryByDate, type HourlySummaryEntry } from '@/lib/counter
 import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
 import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
 import { DowntimeTimeline } from '@/components/DowntimeTimeline';
+import { PageHelp } from '@/components/PageHelp';
 
 const REFRESH_MS = 1000;
 const SUMMARY_REFRESH_MS = 30000;
@@ -195,6 +196,52 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
 
   return (
     <div>
+      <PageHelp
+        title="Live Status"
+        intro="See real-time line status from OFS, refreshing every second. Monitor the current state, production rate, job progress, and hourly throughput without touching OFS."
+        sections={[
+          {
+            title: "Top section - live line status",
+            items: [
+              "Current line state shows whether the line is running, in setup, down, or planned.",
+              "Production rate shows the current cans per hour.",
+              "Console time shows the factory wall-clock time.",
+              "Use the Auto-refresh toggle to turn the automatic 1-second refresh on or off.",
+            ],
+          },
+          {
+            title: "Active job card",
+            items: [
+              "Shows the current product, SKU, target quantity, and rated speed.",
+              "The progress bar shows how far through the job you are, with an estimated finish time.",
+            ],
+          },
+          {
+            title: "Shift timeline",
+            items: [
+              "The bar shows downtime events as they happen, colour-coded: red for unplanned, blue for planned, yellow for setup.",
+              "A dark vertical line marks the current time within the shift.",
+              "The green portion shows how far through the shift you are.",
+            ],
+          },
+          {
+            title: "Shift counts and process counters",
+            items: [
+              "Shift counts show throughput and output totals for the current shift.",
+              "Process counters show units in and units out in real time.",
+            ],
+          },
+          {
+            title: "Hourly production summary",
+            items: [
+              "The table at the bottom shows per-hour throughput for the selected shift and date.",
+              "Use the date picker to look at a different day.",
+              "The summary updates automatically as new readings come in.",
+            ],
+          },
+        ]}
+      />
+
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3 no-print">
         <div className="flex items-center gap-2">
           <Activity className="text-brand-900" size={22} />

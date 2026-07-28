@@ -18,6 +18,7 @@ import {
   type DowntimeEvent,
 } from '@/lib/downtime';
 import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
+import { PageHelp } from '@/components/PageHelp';
 
 function todayStr(): string {
   const now = new Date();
@@ -104,6 +105,36 @@ export function DowntimeHistory({
 
   return (
     <div>
+      <PageHelp
+        title="Downtime History"
+        intro="Search and review all downtime events for a given date and shift. See what stopped the line, how long it lasted, and read any operator comments."
+        sections={[
+          {
+            title: "Searching for events",
+            items: [
+              "Pick a date using the date picker, or use the Today or Yesterday buttons as shortcuts.",
+              "Click Search to load downtime events for that date and the currently selected shift.",
+              "Click Refresh from OFS to pull the latest data directly from OFS.",
+            ],
+          },
+          {
+            title: "Reading the summary cards",
+            items: [
+              "Total downtime shows the combined minutes lost across all events for the selected shift.",
+              "Events resolved shows how many downtime events have ended vs. still ongoing.",
+            ],
+          },
+          {
+            title: "Reading the event table",
+            items: [
+              "Each row is one downtime event, showing start time, category, reason, type (unplanned, planned, or setup), crew, duration, and status (ongoing or resolved).",
+              "If an event has operator comments, a speech-bubble icon appears next to it. Click the row to expand and read the comments.",
+              "Click the row again to collapse the comments.",
+            ],
+          },
+        ]}
+      />
+
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3 no-print">
         <div className="flex items-center gap-2">
           <History className="text-brand-900" size={22} />

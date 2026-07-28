@@ -14,6 +14,7 @@ import {
 } from '@/types';
 import { ShiftTable } from '@/components/ShiftTable';
 import { DowntimeTimeline } from '@/components/DowntimeTimeline';
+import { PageHelp } from '@/components/PageHelp';
 import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
 import { fetchOfsStatus, type OfsLiveStatus } from '@/lib/ofs';
 import { useAutoGrow } from '@/lib/ui';
@@ -180,6 +181,56 @@ export function MonitoringView({
 
   return (
     <div>
+      <PageHelp
+        title="Monitoring"
+        intro="This is your shift handover board. Track rated speed, actual output, OEE, quality, safety, downtime, yield, and scrap for each time interval of the selected shift."
+        sections={[
+          {
+            title: "Setting up the shift",
+            items: [
+              "Pick a shift from the dropdown (Morning, Night, 1st, 2nd, 3rd, or Custom).",
+              "Set the date at the top of the page.",
+              "If you choose Custom, define your own start time, end time, and interval (15 min, 30 min, 1 hour, or 2 hours), then click Generate Table to create the rows.",
+            ],
+          },
+          {
+            title: "Filling in the table",
+            items: [
+              "Each row is one time interval. Type in Rated Speed and Actual Output for each hour.",
+              "OEE % is auto-calculated from your output vs rated speed. Green if 70% or above, red if below.",
+              "Quality and Safety columns have toggle buttons. Tap to cycle through Not Set, Pass, and Issue Logged.",
+              "Downtime Logs - type any shift delays or notes for that interval. Press Enter for a new line, Tab to move to the next field.",
+              "Filler Yield - enter the yield percentage. It turns red below 97% and green at or above.",
+              "Scrap - enter the scrap percentage for that interval.",
+            ],
+          },
+          {
+            title: "Importing data automatically",
+            items: [
+              "Import Counter - pulls hourly production counts from OFS into the Actual Output column for the selected date and shift.",
+              "Import Downtime - pulls downtime events from OFS into the Downtime Logs column, mapped to the correct time intervals.",
+              "Both imports require a date to be selected first.",
+            ],
+          },
+          {
+            title: "Notes, SKU, and exporting",
+            items: [
+              "Type any shift notes and the SKU at the top of the board.",
+              "Print / Export Report - saves or prints the full shift report as a PDF. The help guide and edit fields are excluded from the printout.",
+              "Clear Shift Data - wipes everything for the current shift. You'll be asked to confirm first.",
+            ],
+          },
+          {
+            title: "Timeline bar",
+            items: [
+              "The bar above the table shows downtime events across the shift in colour: red for unplanned, blue for planned, yellow for setup.",
+              "A dark vertical line shows the current time within the shift (the 'now' marker).",
+              "The green portion shows how far through the shift you are.",
+            ],
+          },
+        ]}
+      />
+
       <div className="card card-blue">
         <h3 style={{ margin: 0, border: 'none', padding: 0, borderBottom: '1px solid currentColor', paddingBottom: 6 }}>
           Free-Flow Performance Board

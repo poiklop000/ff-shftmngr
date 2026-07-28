@@ -5,6 +5,7 @@ import {
   type CalcInputs,
 } from '@/types';
 import { useAutoSelect, useEnterToNext } from '@/lib/ui';
+import { PageHelp } from '@/components/PageHelp';
 
 interface CalculatorViewProps {
   calc: CalcInputs;
@@ -77,6 +78,40 @@ export function CalculatorView({ calc, onChange, onUpdate, onClear }: Calculator
 
   return (
     <div className="sm-container">
+      <PageHelp
+        title="Filler Calculator"
+        intro="Estimate your running yield, final can count, and finish time based on remaining syrup and filler speed. Fill in the production details below and press Update to calculate."
+        sections={[
+          {
+            title: "Filling in the inputs",
+            items: [
+              "Product - type the product name for the current run.",
+              "Can Size - pick the package size for this product.",
+              "Total Plan - the total quantity you plan to produce this run.",
+              "Filler Speed - the rated speed of the filler in cans per hour.",
+              "Upstream Volume, Mixer Volume, Mixing Ratio, Filler Bowl Level - enter the remaining syrup and mixing details. These determine how many cans can still be produced.",
+              "Filler Production Counter - the current cumulative counter reading from the filler.",
+              "Cans per layer and Layers per pallet - used to estimate remaining pallets and depal layers.",
+            ],
+          },
+          {
+            title: "Reading the results",
+            items: [
+              "Production Summary card shows your running yield percentage (green if 97% or above, red if below), estimated final count, and estimated finish time.",
+              "End Production card shows how many cans are still left to produce based on remaining syrup, plus how many pallets and depal layers that translates to.",
+            ],
+          },
+          {
+            title: "Buttons",
+            items: [
+              "Update - recalculates all results using the current inputs.",
+              "Clear Calculator - wipes every input so you can start fresh. You'll be asked to confirm first.",
+              "Press Enter on your keyboard to jump to the next field without clicking.",
+            ],
+          },
+        ]}
+      />
+
       <div className="card card-green">
         <h3>Production Summary</h3>
         <Row label="Product:" value={calc.product.trim() || '-'} />
