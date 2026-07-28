@@ -11,6 +11,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [threshold, setThreshold] = useState('10');
+  const [mentionEmail, setMentionEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,11 +39,17 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           .select('value')
           .eq('key', 'teams_alert_threshold_minutes')
           .maybeSingle();
+        const { data: mentionRow } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'teams_mention_email')
+          .maybeSingle();
         if (cancelled) return;
         setWebhookUrl(webhookRow?.value ?? '');
         setEnabled(enabledRow?.value?.toLowerCase() === 'true');
         const parsedThreshold = parseInt(thresholdRow?.value ?? '10', 10);
         setThreshold(Number.isFinite(parsedThreshold) && parsedThreshold > 0 ? String(parsedThreshold) : '10');
+        setMentionEmail(mentionRow?.value ?? '');
       } catch {
         if (!cancelled) setError('Could not load current settings.');
       } finally {
@@ -76,6 +83,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         .from('app_config')
         .upsert({ key: 'teams_alert_threshold_minutes', value: safeThreshold }, { onConflict: 'key' });
       if (thresholdErr) throw new Error(thresholdErr.message);
+      const { error: mentionErr } = await supabase
+        .from('app_config')
+        .upsert({ key: 'teams_mention_email', value: mentionEmail.trim() }, { onConflict: 'key' });
+      if (mentionErr) throw new Error(mentionErr.message);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -83,7 +94,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [webhookUrl, enabled, threshold]);
+  }, [webhookUrl, enabled, threshold, mentionEmail]);
 
   if (!open) return null;
 
@@ -117,6 +128,21 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
               />
+            </div>
+
+            <div className="input-group" style={{ maxWidth: '100%' }}>
+              <label htmlFor="teams-mention">Who to notify (email)</label>
+              <input
+                id="teams-mention"
+                type="email"
+                className="form-control"
+                placeholder="you@company.com"
+                value={mentionEmail}
+                onChange={(e) => setMentionEmail(e.target.value)}
+              />
+              <small style={{ display: 'block', marginTop: 6, color: 'var(--text-muted, #888)', fontSize: 12 }}>
+                Enter your Teams email so alerts @mention you and trigger a notification. Leave blank to send without a mention.
+              </small>
             </div>
 
             <div className="input-group" style={{ maxWidth: '100%' }}>
