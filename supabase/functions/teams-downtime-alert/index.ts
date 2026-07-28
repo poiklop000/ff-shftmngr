@@ -70,8 +70,7 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
 
   return {
     type: "AdaptiveCard",
-    $schema: "http://adaptivecards.io/schemas/AdaptiveCard.json",
-    version: "1.4",
+    version: "1.2",
     body: [
       {
         type: "TextBlock",
