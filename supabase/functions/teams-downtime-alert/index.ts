@@ -52,59 +52,19 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
   const typeLabel = evt.downtime_type ?? "Downtime";
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
-  const crew = evt.crew_name ? `\\n\\n**Crew:** ${evt.crew_name}` : "";
+  const crew = evt.crew_name ? `\n**Crew:** ${evt.crew_name}` : "";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
 
-  return {
-    type: "message",
-    attachments: [
-      {
-        contentType: "application/vnd.microsoft.card.adaptive",
-        contentUrl: "",
-        content: {
-          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-          type: "AdaptiveCard",
-          version: "1.4",
-          msteams: { width: "Full" },
-          body: [
-            {
-              type: "TextBlock",
-              text: `Downtime Alert — ${lineName}`,
-              size: "Large",
-              weight: "Bolder",
-              color: "Attention",
-              wrap: true,
-            },
-            {
-              type: "FactSet",
-              facts: [
-                { title: "Type", value: typeLabel },
-                { title: "Threshold", value: `${ALERT_THRESHOLD_MIN} minutes exceeded` },
-                { title: "Reason", value: reason },
-                { title: "Category", value: category },
-                { title: "Duration", value: formatDuration(durationMs) },
-                { title: "Started", value: startTime },
-              ],
-            },
-            {
-              type: "TextBlock",
-              text: `**Crew:** ${evt.crew_name ?? "—"}`,
-              isSubtle: true,
-              wrap: true,
-            },
-            {
-              type: "TextBlock",
-              text: "Sent automatically by Free-Flow Shift Manager Console",
-              isSubtle: true,
-              spacing: "Small",
-              size: "Small",
-              wrap: true,
-            },
-          ],
-        },
-      },
-    ],
-  };
+  const text =
+    `Downtime Alert — ${lineName}\n` +
+    `${typeLabel} downtime has exceeded ${ALERT_THRESHOLD_MIN} minutes.\n\n` +
+    `**Reason:** ${reason}\n` +
+    `**Category:** ${category}\n` +
+    `**Duration:** ${formatDuration(durationMs)}\n` +
+    `**Started:** ${startTime}${crew}\n\n` +
+    `Sent automatically by Free-Flow Shift Manager Console`;
+
+  return { text };
 }
 
 async function sendTeams(
