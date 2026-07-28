@@ -10,6 +10,7 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [enabled, setEnabled] = useState(false);
+  const [threshold, setThreshold] = useState('10');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -32,9 +33,16 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           .select('value')
           .eq('key', 'teams_alerts_enabled')
           .maybeSingle();
+        const { data: thresholdRow } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'teams_alert_threshold_minutes')
+          .maybeSingle();
         if (cancelled) return;
         setWebhookUrl(webhookRow?.value ?? '');
         setEnabled(enabledRow?.value?.toLowerCase() === 'true');
+        const parsedThreshold = parseInt(thresholdRow?.value ?? '10', 10);
+        setThreshold(Number.isFinite(parsedThreshold) && parsedThreshold > 0 ? String(parsedThreshold) : '10');
       } catch {
         if (!cancelled) setError('Could not load current settings.');
       } finally {
@@ -62,6 +70,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         .from('app_config')
         .upsert({ key: 'teams_alerts_enabled', value: String(enabled) }, { onConflict: 'key' });
       if (enabledErr) throw new Error(enabledErr.message);
+      const parsedThreshold = parseInt(threshold, 10);
+      const safeThreshold = Number.isFinite(parsedThreshold) && parsedThreshold > 0 ? String(parsedThreshold) : '10';
+      const { error: thresholdErr } = await supabase
+        .from('app_config')
+        .upsert({ key: 'teams_alert_threshold_minutes', value: safeThreshold }, { onConflict: 'key' });
+      if (thresholdErr) throw new Error(thresholdErr.message);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -69,7 +83,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [webhookUrl, enabled]);
+  }, [webhookUrl, enabled, threshold]);
 
   if (!open) return null;
 
@@ -103,6 +117,22 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
               />
+            </div>
+
+            <div className="input-group" style={{ maxWidth: '100%' }}>
+              <label htmlFor="teams-threshold">Alert threshold (minutes)</label>
+              <input
+                id="teams-threshold"
+                type="number"
+                min="1"
+                className="form-control"
+                placeholder="10"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+              />
+              <small style={{ display: 'block', marginTop: 6, color: 'var(--text-muted, #888)', fontSize: 12 }}>
+                Alerts are only sent once a downtime has been ongoing for at least this many minutes.
+              </small>
             </div>
 
             <label className="modal-toggle-row">

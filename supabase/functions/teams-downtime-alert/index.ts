@@ -159,6 +159,19 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     const enabled = enabledRow?.value?.toLowerCase() === "true";
 
+    // Read alert threshold in minutes (default 10). Alerts only fire once a
+    // downtime has been ongoing for at least this long, so short blips don't
+    // trigger a notification.
+    const { data: thresholdRow } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "teams_alert_threshold_minutes")
+      .maybeSingle();
+    const thresholdMinutes = Number(thresholdRow?.value);
+    const thresholdMs = (Number.isFinite(thresholdMinutes) && thresholdMinutes > 0
+      ? thresholdMinutes
+      : 10) * 60_000;
+
     if (!webhookUrl || !enabled) {
       console.log(
         `[teams-downtime-alert] ${new Date().toISOString()} skipped — webhook: ${!!webhookUrl}, enabled: ${enabled}`,
@@ -182,9 +195,18 @@ Deno.serve(async (req: Request) => {
     }
 
     let alertedCount = 0;
+    let skippedCount = 0;
     const failed: number[] = [];
+    const nowMs = Date.now();
 
     for (const evt of events) {
+      // Only alert once the downtime has been ongoing for at least the
+      // configured threshold. Shorter events are skipped this pass and
+      // retried on the next cron tick if they're still unresolved.
+      if (nowMs - evt.start_epoch < thresholdMs) {
+        skippedCount++;
+        continue;
+      }
       const payload = buildTeamsMessage(evt);
       const sent = await sendTeams(webhookUrl, payload);
       if (sent) {
@@ -199,9 +221,9 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(
-      `[teams-downtime-alert] ${new Date().toISOString()} alerted=${alertedCount} failed=${failed.length}`,
+      `[teams-downtime-alert] ${new Date().toISOString()} alerted=${alertedCount} skipped=${skippedCount} failed=${failed.length}`,
     );
-    return json({ ok: true, alerted: alertedCount, failed });
+    return json({ ok: true, alerted: alertedCount, skipped: skippedCount, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[teams-downtime-alert] ${new Date().toISOString()} error:`, message);
