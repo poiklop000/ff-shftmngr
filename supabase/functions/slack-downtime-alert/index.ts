@@ -17,7 +17,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const ALERT_THRESHOLD_MIN = 0;
+const ALERT_THRESHOLD_MIN = 10;
 
 interface DowntimeRow {
   id: number;
