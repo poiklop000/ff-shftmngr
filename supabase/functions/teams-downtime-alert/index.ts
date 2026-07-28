@@ -49,19 +49,62 @@ function buildTeamsMessage(evt: DowntimeRow): Record<string, unknown> {
   const typeLabel = evt.downtime_type ?? "Downtime";
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
-  const crew = evt.crew_name ? `\n**Crew:** ${evt.crew_name}` : "";
   const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
 
-  const text =
-    `Downtime Alert — ${lineName}\n` +
-    `${typeLabel} downtime has occurred.\n\n` +
-    `**Reason:** ${reason}\n` +
-    `**Category:** ${category}\n` +
-    `**Duration:** ${formatDuration(durationMs)}\n` +
-    `**Started:** ${startTime}${crew}\n\n` +
-    `Sent automatically by Free-Flow Shift Manager Console`;
+  const facts: { title: string; value: string }[] = [
+    { title: "Reason", value: reason },
+    { title: "Category", value: category },
+    { title: "Duration", value: formatDuration(durationMs) },
+    { title: "Started", value: startTime },
+  ];
 
-  return { text };
+  if (evt.crew_name) {
+    facts.push({ title: "Crew", value: evt.crew_name });
+  }
+
+  return {
+    type: "message",
+    attachments: [{
+      contentType: "application/vnd.microsoft.card.adaptive",
+      contentUrl: "",
+      content: {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        type: "AdaptiveCard",
+        version: "1.4",
+        body: [
+          {
+            type: "TextBlock",
+            text: `Downtime Alert — ${lineName}`,
+            size: "Large",
+            weight: "Bolder",
+            color: "Attention",
+            wrap: true,
+          },
+          {
+            type: "TextBlock",
+            text: `${typeLabel} downtime has occurred.`,
+            size: "Medium",
+            color: "Warning",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "FactSet",
+            facts,
+            spacing: "Medium",
+          },
+          {
+            type: "TextBlock",
+            text: "Sent automatically by Free-Flow Shift Manager Console",
+            size: "Small",
+            isSubtle: true,
+            wrap: true,
+            spacing: "Medium",
+          },
+        ],
+      },
+    }],
+  };
 }
 
 async function sendTeams(
