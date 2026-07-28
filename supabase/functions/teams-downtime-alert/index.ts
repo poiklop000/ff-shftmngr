@@ -7,10 +7,6 @@
 //      resolved_alert_sent column. Only fires if the event lasted at least the
 //      threshold, and includes the total duration.
 //
-// If a mention email is configured, alerts @mention that person so Teams
-// delivers an actual notification ping (webhook posts without mentions are
-// silent). The AdaptiveCard uses msteams.mention metadata to render the mention.
-//
 // Designed to run on a schedule (every minute via pg_cron).
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -51,26 +47,7 @@ function formatDuration(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-interface MentionInfo {
-  text: string; // e.g. "@John Doe"
-  entities: { type: "mention"; text: string; mentioned: { id: string } }[];
-}
-
-function buildMention(email: string, displayName: string): MentionInfo {
-  const mentionText = `@${displayName}`;
-  return {
-    text: mentionText,
-    entities: [
-      {
-        type: "mention",
-        text: mentionText,
-        mentioned: { id: email },
-      },
-    ],
-  };
-}
-
-function buildOccurredMessage(evt: DowntimeRow, mention: MentionInfo | null): Record<string, unknown> {
+function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
   const nowMs = Date.now();
   const durationMs = evt.duration_ms ?? (nowMs - evt.start_epoch);
   const lineName = evt.console_name ?? "Production Line";
@@ -87,27 +64,19 @@ function buildOccurredMessage(evt: DowntimeRow, mention: MentionInfo | null): Re
   ];
   if (evt.crew_name) facts.push({ title: "Crew:", value: evt.crew_name });
 
-  const headerText = mention
-    ? `${mention.text} — Downtime Started on ${lineName}`
-    : `Downtime Started — ${lineName}`;
-
-  const body: Record<string, unknown>[] = [
-    { type: "TextBlock", text: headerText, wrap: true, weight: "Bolder", size: "Large" },
-    { type: "TextBlock", text: `${typeLabel} downtime is ONGOING.`, wrap: true, color: "Attention", weight: "Bolder" },
-    { type: "FactSet", facts },
-    { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
-  ];
-
-  const card: Record<string, unknown> = {
+  return {
     type: "AdaptiveCard",
     version: "1.2",
-    body,
+    body: [
+      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large" },
+      { type: "TextBlock", text: `${typeLabel} downtime is ONGOING.`, wrap: true, color: "Attention", weight: "Bolder" },
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
+    ],
   };
-  if (mention) card.msteams = { entities: mention.entities };
-  return card;
 }
 
-function buildResolvedMessage(evt: DowntimeRow, mention: MentionInfo | null): Record<string, unknown> {
+function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
   const durationMs = evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0);
   const lineName = evt.console_name ?? "Production Line";
   const typeLabel = evt.downtime_type ?? "Downtime";
@@ -125,24 +94,16 @@ function buildResolvedMessage(evt: DowntimeRow, mention: MentionInfo | null): Re
   ];
   if (evt.crew_name) facts.push({ title: "Crew:", value: evt.crew_name });
 
-  const headerText = mention
-    ? `${mention.text} — Downtime Resolved on ${lineName}`
-    : `Downtime Resolved — ${lineName}`;
-
-  const body: Record<string, unknown>[] = [
-    { type: "TextBlock", text: headerText, wrap: true, weight: "Bolder", size: "Large" },
-    { type: "TextBlock", text: `${typeLabel} downtime has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
-    { type: "FactSet", facts },
-    { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
-  ];
-
-  const card: Record<string, unknown> = {
+  return {
     type: "AdaptiveCard",
     version: "1.2",
-    body,
+    body: [
+      { type: "TextBlock", text: `Downtime Resolved — ${lineName}`, weight: "Bolder", size: "Large" },
+      { type: "TextBlock", text: `${typeLabel} downtime has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
+    ],
   };
-  if (mention) card.msteams = { entities: mention.entities };
-  return card;
 }
 
 async function sendTeams(
@@ -205,17 +166,6 @@ Deno.serve(async (req: Request) => {
       ? thresholdMinutes
       : 10) * 60_000;
 
-    const { data: mentionRow } = await supabase
-      .from("app_config")
-      .select("value")
-      .eq("key", "teams_mention_email")
-      .maybeSingle();
-    const mentionEmail = mentionRow?.value?.trim();
-    const mentionDisplayName = mentionEmail
-      ? mentionEmail.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      : "";
-    const mention = mentionEmail ? buildMention(mentionEmail, mentionDisplayName) : null;
-
     if (!webhookUrl || !enabled) {
       console.log(
         `[teams-downtime-alert] ${new Date().toISOString()} skipped — webhook: ${!!webhookUrl}, enabled: ${enabled}`,
@@ -226,6 +176,11 @@ Deno.serve(async (req: Request) => {
     const nowMs = Date.now();
     const recentEndCutoffMs = nowMs - 10 * 60_000;
 
+    // Fetch events that need either an OCCURRED or RESOLVED alert.
+    // Conditions:
+    //   - OCCURRED alert needed: alert_sent = false AND unresolved AND ongoing >= threshold
+    //   - RESOLVED alert needed: resolved_alert_sent = false AND resolved AND ended recently
+    //     AND total duration >= threshold
     const { data: events, error } = await supabase
       .from("downtime_events")
       .select("id, console_name, downtime_type, reason, category, start_epoch, duration_ms, start_text, crew_name, resolved, end_epoch, alert_sent, resolved_alert_sent")
@@ -253,6 +208,7 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // Duration check
       const effectiveDurationMs = evt.resolved
         ? (evt.duration_ms ?? (evt.end_epoch ? evt.end_epoch - evt.start_epoch : 0))
         : (nowMs - evt.start_epoch);
@@ -262,8 +218,9 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // Send the appropriate alert(s)
       if (needsOccurred) {
-        const payload = buildOccurredMessage(evt, mention);
+        const payload = buildOccurredMessage(evt);
         const sent = await sendTeams(webhookUrl, payload);
         if (sent) {
           await supabase
@@ -277,7 +234,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (needsResolved) {
-        const payload = buildResolvedMessage(evt, mention);
+        const payload = buildResolvedMessage(evt);
         const sent = await sendTeams(webhookUrl, payload);
         if (sent) {
           await supabase
@@ -293,7 +250,7 @@ Deno.serve(async (req: Request) => {
 
     const totalAlerted = occurredCount + resolvedCount;
     console.log(
-      `[teams-downtime-alert] ${new Date().toISOString()} occurred=${occurredCount} resolved=${resolvedCount} skipped=${skippedCount} failed=${failed.length} mention=${mentionEmail || "none"}`,
+      `[teams-downtime-alert] ${new Date().toISOString()} occurred=${occurredCount} resolved=${resolvedCount} skipped=${skippedCount} failed=${failed.length}`,
     );
     return json({ ok: true, alerted: totalAlerted, occurred: occurredCount, resolved: resolvedCount, skipped: skippedCount, failed });
   } catch (err) {
