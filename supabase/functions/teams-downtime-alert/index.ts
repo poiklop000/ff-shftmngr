@@ -1,11 +1,14 @@
 // teams-downtime-alert — sends Microsoft Teams notifications for downtime events.
 //
-// Two alert types are supported:
+// Three alert types are supported:
 //   1. OCCURRED — sent when an unresolved downtime has been ongoing for at least
 //      the configured threshold. Tracked via the alert_sent column.
 //   2. RESOLVED — sent when a downtime event ends. Tracked via the
 //      resolved_alert_sent column. Only fires if the event lasted at least the
 //      threshold, and includes the total duration.
+//   3. RECURRING — sent when 5+ downtimes with the same reason + category occur
+//      within a rolling 1-hour window. Re-fires at escalating thresholds
+//      (5, 7, 9, 11, ...). Tracked via the recurring_issue_alerts table.
 //
 // Designed to run on a schedule (every minute via pg_cron).
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -47,6 +50,25 @@ function formatDuration(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+// Format an epoch in the same local style as OFS start_text (e.g. "2026-07-28 22:14:33.581").
+// OFS reports start_text in New Zealand local time with no zone suffix, so we match that
+// for end times to keep the two timestamps consistent in notifications.
+function formatEpochLocal(epoch: number): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Pacific/Auckland",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(epoch));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  const ms = String(epoch % 1000).padStart(3, "0");
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}.${ms}`;
+}
+
 // Color-code alerts by downtime type so they are visually distinguishable in Teams.
 //   UNPLANNED — Attention (red)   — unexpected breakdowns, highest urgency
 //   PLANNED    — Accent (blue)     — scheduled maintenance / planned stops
@@ -71,6 +93,35 @@ function typeStyle(downtimeType: string | null): TypeStyle {
   }
 }
 
+function buildRecurringIssueMessage(
+  reason: string,
+  category: string,
+  count: number,
+  threshold: number,
+  lines: string[],
+): Record<string, unknown> {
+  const facts: { title: string; value: string }[] = [
+    { title: "Reason:", value: reason },
+    { title: "Category:", value: category },
+    { title: "Occurrences (last hour):", value: String(count) },
+    { title: "Alert level:", value: `${threshold} occurrences` },
+  ];
+  if (lines.length > 0) {
+    facts.push({ title: "Lines affected:", value: lines.join(", ") });
+  }
+
+  return {
+    type: "AdaptiveCard",
+    version: "1.2",
+    body: [
+      { type: "TextBlock", text: "Recurring Issue Detected", weight: "Bolder", size: "Large", color: "Warning" },
+      { type: "TextBlock", text: `The same downtime reason has occurred ${count} times in the last hour.`, wrap: true, weight: "Bolder" },
+      { type: "FactSet", facts },
+      { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
+    ],
+  };
+}
+
 function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
   const nowMs = Date.now();
   const durationMs = evt.duration_ms ?? (nowMs - evt.start_epoch);
@@ -78,7 +129,7 @@ function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
   const style = typeStyle(evt.downtime_type);
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
-  const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
+  const startTime = evt.start_text ?? formatEpochLocal(evt.start_epoch);
 
   const facts: { title: string; value: string }[] = [
     { title: "Type:", value: style.label },
@@ -93,7 +144,7 @@ function buildOccurredMessage(evt: DowntimeRow): Record<string, unknown> {
     type: "AdaptiveCard",
     version: "1.2",
     body: [
-      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large", color: style.color },
+      { type: "TextBlock", text: `Downtime Started — ${lineName}`, weight: "Bolder", size: "Large", color: "Attention" },
       { type: "TextBlock", text: `${style.label} is ONGOING.`, wrap: true, color: style.color, weight: "Bolder" },
       { type: "FactSet", facts },
       { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
@@ -107,8 +158,8 @@ function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
   const style = typeStyle(evt.downtime_type);
   const reason = evt.reason ?? "No reason recorded";
   const category = evt.category ?? "Uncategorised";
-  const startTime = evt.start_text ?? new Date(evt.start_epoch).toISOString();
-  const endTime = evt.end_epoch ? new Date(evt.end_epoch).toISOString() : "Unknown";
+  const startTime = evt.start_text ?? formatEpochLocal(evt.start_epoch);
+  const endTime = evt.end_epoch ? formatEpochLocal(evt.end_epoch) : "Unknown";
 
   const facts: { title: string; value: string }[] = [
     { title: "Type:", value: style.label },
@@ -125,7 +176,7 @@ function buildResolvedMessage(evt: DowntimeRow): Record<string, unknown> {
     version: "1.2",
     body: [
       { type: "TextBlock", text: `Downtime Resolved — ${lineName}`, weight: "Bolder", size: "Large", color: "Good" },
-      { type: "TextBlock", text: `${style.label} has ENDED.`, wrap: true, color: "Good", weight: "Bolder" },
+      { type: "TextBlock", text: `${style.label} has ENDED.`, wrap: true, color: style.color, weight: "Bolder" },
       { type: "FactSet", facts },
       { type: "TextBlock", text: "— Sent automatically by Free-Flow Shift Manager Console", wrap: true, isSubtle: true, size: "Small" },
     ],
@@ -191,6 +242,23 @@ Deno.serve(async (req: Request) => {
     const thresholdMs = (Number.isFinite(thresholdMinutes) && thresholdMinutes >= 0
       ? thresholdMinutes
       : 10) * 60_000;
+
+    const { data: recurringEnabledRow } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "teams_recurring_alerts_enabled")
+      .maybeSingle();
+    const recurringEnabled = recurringEnabledRow?.value?.toLowerCase() === "true";
+
+    const { data: recurringThresholdRow } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "teams_recurring_alert_initial_threshold")
+      .maybeSingle();
+    const recurringInitialThreshold = (() => {
+      const n = Number(recurringThresholdRow?.value);
+      return Number.isFinite(n) && n >= 2 ? Math.floor(n) : 5;
+    })();
 
     if (!webhookUrl || !enabled) {
       console.log(
@@ -274,11 +342,105 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const totalAlerted = occurredCount + resolvedCount;
+    // --- Recurring issue detection ---
+    // Count downtime_events from the last 60 minutes grouped by reason + category.
+    // If any group reaches the escalating threshold (5, 7, 9, ...), send an alert.
+    let recurringCount = 0;
+
+    if (recurringEnabled) {
+      const oneHourAgoMs = nowMs - 60 * 60 * 1000;
+
+      const { data: recentEvents, error: recentError } = await supabase
+        .from("downtime_events")
+        .select("reason, category, console_name")
+        .gte("start_epoch", oneHourAgoMs)
+        .not("reason", "is", null)
+        .not("category", "is", null);
+
+      if (recentError) throw new Error(recentError.message);
+
+      const groupMap = new Map<string, { reason: string; category: string; count: number; lines: Set<string> }>();
+      for (const evt of recentEvents ?? []) {
+        const key = `${evt.reason}|||${evt.category}`;
+        const existing = groupMap.get(key);
+        if (existing) {
+          existing.count++;
+          if (evt.console_name) existing.lines.add(evt.console_name);
+        } else {
+          groupMap.set(key, {
+            reason: evt.reason as string,
+            category: evt.category as string,
+            count: 1,
+            lines: new Set(evt.console_name ? [evt.console_name] : []),
+          });
+        }
+      }
+
+      const { data: trackingRows, error: trackingError } = await supabase
+        .from("recurring_issue_alerts")
+        .select("id, reason, category, last_threshold, last_alerted_at");
+
+      if (trackingError) throw new Error(trackingError.message);
+
+      const trackingMap = new Map<string, { id: string; last_threshold: number; last_alerted_at: string }>();
+      for (const row of trackingRows ?? []) {
+        trackingMap.set(`${row.reason}|||${row.category}`, {
+          id: row.id as string,
+          last_threshold: row.last_threshold as number,
+          last_alerted_at: row.last_alerted_at as string,
+        });
+      }
+
+      for (const [, group] of groupMap) {
+        if (group.count < recurringInitialThreshold) continue;
+
+        const trackingKey = `${group.reason}|||${group.category}`;
+        const tracking = trackingMap.get(trackingKey);
+
+        const trackingAgeMs = tracking
+          ? nowMs - new Date(tracking.last_alerted_at).getTime()
+          : Infinity;
+        const isStale = trackingAgeMs > 60 * 60 * 1000;
+
+        let nextThreshold: number;
+        if (!tracking || isStale) {
+          nextThreshold = recurringInitialThreshold;
+        } else {
+          nextThreshold = tracking.last_threshold + 2;
+        }
+
+        if (group.count < nextThreshold) continue;
+
+        const payload = buildRecurringIssueMessage(
+          group.reason,
+          group.category,
+          group.count,
+          nextThreshold,
+          Array.from(group.lines),
+        );
+        const sent = await sendTeams(webhookUrl, payload);
+        if (sent) {
+          const nowIso = new Date().toISOString();
+          await supabase
+            .from("recurring_issue_alerts")
+            .upsert({
+              reason: group.reason,
+              category: group.category,
+              last_threshold: nextThreshold,
+              last_alerted_at: nowIso,
+              occurrence_count: group.count,
+              updated_at: nowIso,
+            }, { onConflict: "reason,category" });
+          recurringCount++;
+        }
+      }
+    }
+
+    const totalAlerted = occurredCount + resolvedCount + recurringCount;
     console.log(
-      `[teams-downtime-alert] ${new Date().toISOString()} occurred=${occurredCount} resolved=${resolvedCount} skipped=${skippedCount} failed=${failed.length}`,
+      `[teams-downtime-alert] ${new Date().toISOString()} occurred=${occurredCount} resolved=${resolvedCount} recurring=${recurringCount} skipped=${skippedCount} failed=${failed.length}`,
     );
-    return json({ ok: true, alerted: totalAlerted, occurred: occurredCount, resolved: resolvedCount, skipped: skippedCount, failed });
+    return json({ ok: true, alerted: totalAlerted, occurred: occurredCount, resolved: resolvedCount, recurring: recurringCount, skipped: skippedCount, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[teams-downtime-alert] ${new Date().toISOString()} error:`, message);

@@ -11,6 +11,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [threshold, setThreshold] = useState('10');
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurringThreshold, setRecurringThreshold] = useState('5');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,11 +40,24 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           .select('value')
           .eq('key', 'teams_alert_threshold_minutes')
           .maybeSingle();
+        const { data: recurringEnabledRow } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'teams_recurring_alerts_enabled')
+          .maybeSingle();
+        const { data: recurringThresholdRow } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'teams_recurring_alert_initial_threshold')
+          .maybeSingle();
         if (cancelled) return;
         setWebhookUrl(webhookRow?.value ?? '');
         setEnabled(enabledRow?.value?.toLowerCase() === 'true');
         const parsedThreshold = parseInt(thresholdRow?.value ?? '10', 10);
         setThreshold(Number.isFinite(parsedThreshold) && parsedThreshold > 0 ? String(parsedThreshold) : '10');
+        setRecurringEnabled(recurringEnabledRow?.value?.toLowerCase() === 'true');
+        const parsedRecurring = parseInt(recurringThresholdRow?.value ?? '5', 10);
+        setRecurringThreshold(Number.isFinite(parsedRecurring) && parsedRecurring >= 2 ? String(parsedRecurring) : '5');
       } catch {
         if (!cancelled) setError('Could not load current settings.');
       } finally {
@@ -76,6 +91,16 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         .from('app_config')
         .upsert({ key: 'teams_alert_threshold_minutes', value: safeThreshold }, { onConflict: 'key' });
       if (thresholdErr) throw new Error(thresholdErr.message);
+      const { error: recurringEnabledErr } = await supabase
+        .from('app_config')
+        .upsert({ key: 'teams_recurring_alerts_enabled', value: String(recurringEnabled) }, { onConflict: 'key' });
+      if (recurringEnabledErr) throw new Error(recurringEnabledErr.message);
+      const parsedRecurring = parseInt(recurringThreshold, 10);
+      const safeRecurring = Number.isFinite(parsedRecurring) && parsedRecurring >= 2 ? String(parsedRecurring) : '5';
+      const { error: recurringThresholdErr } = await supabase
+        .from('app_config')
+        .upsert({ key: 'teams_recurring_alert_initial_threshold', value: safeRecurring }, { onConflict: 'key' });
+      if (recurringThresholdErr) throw new Error(recurringThresholdErr.message);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -83,7 +108,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [webhookUrl, enabled, threshold]);
+  }, [webhookUrl, enabled, threshold, recurringEnabled, recurringThreshold]);
 
   if (!open) return null;
 
@@ -147,6 +172,37 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 <span className="toggle-switch-knob" />
               </button>
             </label>
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+              <label className="modal-toggle-row">
+                <span>Enable recurring issue alerts</span>
+                <button
+                  type="button"
+                  className={`toggle-switch ${recurringEnabled ? 'on' : ''}`}
+                  onClick={() => setRecurringEnabled((v) => !v)}
+                  aria-pressed={recurringEnabled}
+                  aria-label="Toggle recurring issue alerts"
+                >
+                  <span className="toggle-switch-knob" />
+                </button>
+              </label>
+
+              <div className="input-group" style={{ maxWidth: '100%', marginTop: 12 }}>
+                <label htmlFor="recurring-threshold">Recurring alert threshold (occurrences)</label>
+                <input
+                  id="recurring-threshold"
+                  type="number"
+                  min="2"
+                  className="form-control"
+                  placeholder="5"
+                  value={recurringThreshold}
+                  onChange={(e) => setRecurringThreshold(e.target.value)}
+                />
+                <small style={{ display: 'block', marginTop: 6, color: 'var(--text-muted, #888)', fontSize: 12 }}>
+                  Sends an alert when the same downtime reason + category occurs this many times within a rolling 1-hour window. Re-fires at escalating intervals (+2 each time: 5, 7, 9, 11…).
+                </small>
+              </div>
+            </div>
 
             {error && (
               <div className="modal-status modal-status-error">
