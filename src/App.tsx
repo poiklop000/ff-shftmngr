@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, ClipboardList, Activity, TimerOff, Settings, History } from 'lucide-react';
+import { Calculator, ClipboardList, Activity, TimerOff, Settings } from 'lucide-react';
 import { CalculatorView } from '@/components/CalculatorView';
 import { DowntimeHistory } from '@/components/DowntimeHistory';
 import { LiveLineStatus } from '@/components/LiveLineStatus';
 import { MonitoringView } from '@/components/MonitoringView';
-import { RecordHistory } from '@/components/RecordHistory';
 import { SettingsModal } from '@/components/SettingsModal';
 import {
   computeHourlyOutputs,
@@ -29,9 +28,9 @@ import { fetchDowntimeByDate } from '@/lib/downtime';
 import { saveMonitoringRecord, loadMonitoringRecord, buildActiveJobSnapshot, type ActiveJobSnapshot } from '@/lib/monitoring';
 import { fetchOfsStatus } from '@/lib/ofs';
 
-type View = 'calculator' | 'tracker' | 'live' | 'downtime' | 'history';
+type View = 'calculator' | 'tracker' | 'live' | 'downtime';
 const VIEW_KEY = 'canning_calc_view';
-const VALID_VIEWS: View[] = ['calculator', 'tracker', 'live', 'downtime', 'history'];
+const VALID_VIEWS: View[] = ['calculator', 'tracker', 'live', 'downtime'];
 
 export default function App() {
   const [view, setView] = useState<View>(() => {
@@ -441,11 +440,6 @@ function epochToConsoleTime(
             currentShift={data.shift}
             customHours={data.customHours}
           />
-        ) : view === 'history' ? (
-          <RecordHistory
-            date={data.date}
-            onDateChange={(value) => handleMetaChange(data.shift, 'date', value)}
-          />
         ) : (
           <MonitoringView
             db={data.db}
@@ -477,12 +471,11 @@ function epochToConsoleTime(
       </div>
 
       <nav className={`bottom-tab-bar${keyboardOpen ? ' bottom-tab-bar-hidden' : ''}`} aria-label="Section navigation" aria-hidden={keyboardOpen}>
-        <span className="bottom-tab-indicator" style={{ ['--i' as string]: String(((['live','tracker','downtime','history','calculator'] as const).indexOf(view))) }} aria-hidden="true" />
+        <span className="bottom-tab-indicator" style={{ ['--i' as string]: String(((['live','tracker','downtime','calculator'] as const).indexOf(view))) }} aria-hidden="true" />
         {([
           { id: 'live', label: 'Live', Icon: Activity },
           { id: 'tracker', label: 'Monitoring', Icon: ClipboardList },
           { id: 'downtime', label: 'Downtime', Icon: TimerOff },
-          { id: 'history', label: 'History', Icon: History },
           { id: 'calculator', label: 'Calculator', Icon: Calculator },
         ] as const).map(({ id, label, Icon }) => (
           <button
