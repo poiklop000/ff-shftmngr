@@ -12,7 +12,7 @@ import {
   TrendingUp,
   User as UserIcon,
 } from 'lucide-react';
-import { fetchOfsStatus, classifyLineState, LINE_STATE_COLORS, type OfsLiveStatus, type LineStateClass } from '@/lib/ofs';
+import { fetchOfsStatus, classifyLineState, LINE_STATE_COLORS, type OfsLiveStatus, type OfsRunState, type LineStateClass } from '@/lib/ofs';
 import { fetchHourlySummaryByDate, type HourlySummaryEntry } from '@/lib/counterLogs';
 import { fetchDowntimeByDate, type DowntimeEvent } from '@/lib/downtime';
 import { filterByShiftWindow, getActiveHours, SHIFT_LABELS, type Shift } from '@/types';
@@ -205,7 +205,7 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
             items: [
               "Current line state shows whether the line is running, in setup, down, or planned.",
               "Production rate shows the current cans per hour.",
-              "Console time shows the factory wall-clock time.",
+              "State time shows how long the line has been in its current state (running, setup, downtime, or planned downtime), colour-coded to match.",
               "Use the Auto-refresh toggle to turn the automatic 1-second refresh on or off.",
             ],
           },
@@ -298,10 +298,11 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
         />
         <StatusCard
           icon={<Clock size={18} />}
-          label="Console Time"
-          value={formatClockTime(consoleTime)}
-          hint={timezone ? `${timezone} · ${consoleTime.split(' ')[0] || ''}` : undefined}
-          accent="slate"
+          label="State Time"
+          value={formatStateDuration(runstate, lastUpdated)}
+          hint={runstate?.description || runstate?.name || undefined}
+          accent={lineStateClass}
+          badge={<span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: stateColor }} />}
         />
       </div>
 
@@ -602,8 +603,25 @@ function formatHourRange(hour: string): string {
   return `${String(h).padStart(2, '0')}:${m} - ${String(nextH).padStart(2, '0')}:${m}`;
 }
 
-function formatClockTime(text: string): string {
-  const match = text.match(/(\d{1,2}):(\d{2}):(\d{2})/);
-  if (match) return `${match[1].padStart(2, '0')}:${match[2]}:${match[3]}`;
-  return text;
+function formatStateDuration(runstate: OfsRunState | undefined, lastUpdated: Date | null): string {
+  if (!runstate) return '-';
+  if (runstate.start && runstate.start > 0) {
+    const now = lastUpdated ? lastUpdated.getTime() : Date.now();
+    const elapsedMs = Math.max(0, now - runstate.start);
+    return formatElapsedMs(elapsedMs);
+  }
+  if (runstate.duration && runstate.duration > 0) {
+    return formatElapsedMs(runstate.duration);
+  }
+  return '-';
+}
+
+function formatElapsedMs(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${pad(m)}m ${pad(s)}s`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
 }
