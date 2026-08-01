@@ -25,6 +25,8 @@ import {
 } from '@/types';
 import { fetchCounterLogsByDate } from '@/lib/counterLogs';
 import { fetchDowntimeByDate } from '@/lib/downtime';
+import { saveMonitoringRecord, loadMonitoringRecord, buildActiveJobSnapshot, type ActiveJobSnapshot } from '@/lib/monitoring';
+import { fetchOfsStatus } from '@/lib/ofs';
 
 type View = 'calculator' | 'tracker' | 'live' | 'downtime';
 const VIEW_KEY = 'canning_calc_view';
@@ -38,6 +40,7 @@ export default function App() {
   const [data, setData] = useState<AppData>(() => loadAppData());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [hasSavedRecord, setHasSavedRecord] = useState(false);
 
   useEffect(() => {
     saveAppData(data);
@@ -171,6 +174,89 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // Check whether a saved record exists for the current date + shift
+  // whenever either changes. This enables/disables the Load Record button.
+  useEffect(() => {
+    if (!data.date) {
+      setHasSavedRecord(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const record = await loadMonitoringRecord(data.date, data.shift);
+        if (!cancelled) setHasSavedRecord(!!record);
+      } catch {
+        if (!cancelled) setHasSavedRecord(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [data.date, data.shift]);
+
+  const handleSaveRecord = useCallback(async () => {
+    if (!data.date) {
+      throw new Error('Select a date first at the top of the monitoring table.');
+    }
+    const shift = data.shift;
+    const boardData = data.db[shift];
+    if (Object.keys(boardData.rows).length === 0) {
+      throw new Error('No monitoring rows for this shift. Generate the table first.');
+    }
+
+    let activeJob: ActiveJobSnapshot | null = null;
+    try {
+      const status = await fetchOfsStatus();
+      activeJob = buildActiveJobSnapshot(status);
+    } catch {
+      // If OFS is unreachable, save with null active job
+    }
+
+    let downtimeSnapshot: Awaited<ReturnType<typeof fetchDowntimeByDate>> = [];
+    try {
+      downtimeSnapshot = await fetchDowntimeByDate(data.date);
+    } catch {
+      // If downtime fetch fails, save with empty snapshot
+    }
+
+    let counterSnapshot: Awaited<ReturnType<typeof fetchCounterLogsByDate>> = [];
+    try {
+      counterSnapshot = await fetchCounterLogsByDate(data.date);
+    } catch {
+      // If counter fetch fails, save with empty snapshot
+    }
+
+    await saveMonitoringRecord({
+      date: data.date,
+      shift,
+      boardData,
+      notes: data.notes[shift] ?? '',
+      sku: data.sku[shift] ?? '',
+      activeJob,
+      downtimeSnapshot,
+      counterSnapshot,
+    });
+    setHasSavedRecord(true);
+  }, [data.date, data.shift, data.db, data.notes, data.sku]);
+
+  const handleLoadRecord = useCallback(async () => {
+    if (!data.date) {
+      throw new Error('Select a date first at the top of the monitoring table.');
+    }
+    const shift = data.shift;
+    const record = await loadMonitoringRecord(data.date, shift);
+    if (!record) {
+      throw new Error(`No saved record found for ${shift} on ${data.date}.`);
+    }
+    setData((prev) => {
+      const next = structuredClone(prev) as AppData;
+      next.db[shift] = record.board_data;
+      next.notes[shift] = record.notes ?? '';
+      next.sku[shift] = record.sku ?? '';
+      next.db[shift].date = record.record_date;
+      return next;
+    });
+  }, [data.date, data.shift]);
 
   const handleExportReport = useCallback(() => {
     const dateStr = data.date || '';
@@ -373,6 +459,9 @@ function epochToConsoleTime(
             onExportReport={handleExportReport}
             onImportCounter={handleImportCounter}
             onImportDowntime={handleImportDowntime}
+            onSaveRecord={handleSaveRecord}
+            onLoadRecord={handleLoadRecord}
+            hasSavedRecord={hasSavedRecord}
           />
         )}
 

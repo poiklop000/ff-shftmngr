@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Save, FolderOpen, CheckCircle2 } from 'lucide-react';
 import {
   filterByShiftWindow,
   generateHours,
@@ -37,6 +37,9 @@ interface MonitoringViewProps {
   onExportReport: () => void;
   onImportCounter: () => Promise<void>;
   onImportDowntime: () => Promise<void>;
+  onSaveRecord: () => Promise<void>;
+  onLoadRecord: () => Promise<void>;
+  hasSavedRecord: boolean;
 }
 
 export function MonitoringView({
@@ -57,9 +60,14 @@ export function MonitoringView({
   onExportReport,
   onImportCounter,
   onImportDowntime,
+  onSaveRecord,
+  onLoadRecord,
+  hasSavedRecord,
 }: MonitoringViewProps) {
   const [importingCounter, setImportingCounter] = useState(false);
   const [importingDowntime, setImportingDowntime] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadingRecord, setLoadingRecord] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<DowntimeEvent[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -121,6 +129,32 @@ export function MonitoringView({
     () => filterByShiftWindow(timelineEvents, currentShift, activeHours, date, (e) => e.start_text),
     [timelineEvents, currentShift, activeHours, date],
   );
+
+  const handleSave = async () => {
+    setSaving(true);
+    setImportMsg(null);
+    try {
+      await onSaveRecord();
+      setImportMsg('Record saved to database');
+    } catch (err) {
+      setImportMsg(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLoadRecord = async () => {
+    setLoadingRecord(true);
+    setImportMsg(null);
+    try {
+      await onLoadRecord();
+      setImportMsg('Record loaded from database');
+    } catch (err) {
+      setImportMsg(err instanceof Error ? err.message : 'Load failed');
+    } finally {
+      setLoadingRecord(false);
+    }
+  };
 
   const handleImportCounter = async () => {
     setImportingCounter(true);
@@ -218,6 +252,14 @@ export function MonitoringView({
               "Type any shift notes and the SKU at the top of the board.",
               "Print / Export Report - saves or prints the full shift report as a PDF. The help guide and edit fields are excluded from the printout.",
               "Clear Shift Data - wipes everything for the current shift. You'll be asked to confirm first.",
+            ],
+          },
+          {
+            title: "Saving and loading records",
+            items: [
+              "Save Record - stores everything on the board (rows, notes, SKU) plus the current active job, downtime events, and counter readings to the database for future reference.",
+              "Load Record - retrieves a previously saved record for the selected date and shift, restoring the board to exactly how it was saved.",
+              "Saving again for the same date and shift replaces the previous record.",
             ],
           },
           {
@@ -388,6 +430,33 @@ export function MonitoringView({
         <button type="button" className="tab-btn tab-btn-blue" onClick={onExportReport}>
           Print / Export Report
         </button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="tab-btn tab-btn-green"
+          onClick={handleSave}
+          disabled={saving || loadingRecord || importingCounter || importingDowntime}
+          title="Save the current board data, active job, downtime, and counter readings to the database"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          Save Record
+        </button>
+        <button
+          type="button"
+          className="tab-btn tab-btn-amber"
+          onClick={handleLoadRecord}
+          disabled={saving || loadingRecord || importingCounter || importingDowntime || !hasSavedRecord}
+          title={hasSavedRecord ? 'Load a previously saved record for this date and shift' : 'No saved record for this date and shift'}
+        >
+          {loadingRecord ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+          Load Record
+        </button>
+        {hasSavedRecord && !saving && !loadingRecord && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#166534' }}>
+            <CheckCircle2 size={12} /> Saved record exists
+          </span>
+        )}
       </div>
       {importMsg && (
         <div style={{ textAlign: 'center', marginTop: 8, fontSize: 12, fontWeight: 600, color: importMsg.includes('failed') ? '#b91c1c' : '#166534' }}>
