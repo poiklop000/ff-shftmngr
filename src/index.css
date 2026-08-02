@@ -52,6 +52,68 @@ html {
 .app-bar-settings-btn:hover { background: rgba(255, 255, 255, 0.28); transform: translateY(-50%) scale(1.05); }
 .app-bar-settings-btn:active { transform: translateY(-50%) scale(0.95); }
 
+/* ---- App bar global controls (date + shift) ---- */
+.app-bar-controls {
+  max-width: 1200px;
+  margin: 12px auto 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app-bar-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 5px 10px;
+  transition: background-color 0.2s;
+}
+.app-bar-ctrl-group:hover { background: rgba(255, 255, 255, 0.22); }
+.app-bar-ctrl-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+.app-bar-date-input {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  outline: none;
+  cursor: pointer;
+}
+.app-bar-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+.app-bar-shift-select {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  outline: none;
+  cursor: pointer;
+  max-width: 170px;
+}
+.app-bar-shift-select option {
+  color: #0f172a;
+  font-size: 12px;
+}
+@media print {
+  .app-bar-controls { display: none !important; }
+}
+
 /* ---- Modal ---- */
 .modal-overlay {
   position: fixed;

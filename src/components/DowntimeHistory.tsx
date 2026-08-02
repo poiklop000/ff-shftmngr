@@ -49,12 +49,10 @@ function isOvernightShift(shift: Shift, customHours: string[]): boolean {
 
 export function DowntimeHistory({
   date: globalDate,
-  onDateChange,
   currentShift,
   customHours,
 }: {
   date: string;
-  onDateChange: (date: string) => void;
   currentShift: Shift;
   customHours: string[];
 }) {
@@ -152,22 +150,7 @@ export function DowntimeHistory({
       </div>
 
       <div className="card rounded-lg p-4 mb-4 border border-slate-200 bg-white">
-        <div className="flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">
-              Date
-            </label>
-            <div className="flex items-center gap-2 border border-slate-300 rounded-md px-3 py-2 bg-white">
-              <Calendar size={16} className="text-slate-400" />
-              <input
-                type="date"
-                value={globalDate || ''}
-                max={todayStr()}
-                onChange={(e) => onDateChange(e.target.value)}
-                className="border-none bg-transparent text-[14px] font-semibold text-slate-800 outline-none"
-              />
-            </div>
-          </div>
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-bold text-white bg-brand-700 hover:bg-brand-800 transition-colors"
@@ -177,26 +160,6 @@ export function DowntimeHistory({
             <Search size={14} />
             Search
           </button>
-          <div className="flex items-end gap-1.5">
-            <button
-              type="button"
-              className="px-3 py-2 rounded-md text-[12px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              onClick={() => onDateChange(todayStr())}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              className="px-3 py-2 rounded-md text-[12px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              onClick={() => {
-                const d = new Date();
-                d.setDate(d.getDate() - 1);
-                onDateChange(dateToStr(d));
-              }}
-            >
-              Yesterday
-            </button>
-          </div>
         </div>
       </div>
 

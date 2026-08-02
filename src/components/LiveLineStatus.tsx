@@ -53,10 +53,9 @@ interface LiveLineStatusProps {
   currentShift: Shift;
   customHours: string[];
   date: string;
-  onDateChange: (date: string) => void;
 }
 
-export function LiveLineStatus({ currentShift, customHours, date, onDateChange }: LiveLineStatusProps) {
+export function LiveLineStatus({ currentShift, customHours, date }: LiveLineStatusProps) {
   const [status, setStatus] = useState<OfsLiveStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -412,16 +411,6 @@ export function LiveLineStatus({ currentShift, customHours, date, onDateChange }
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 border border-slate-300 rounded-md px-2.5 py-1.5 bg-white">
-              <Calendar size={15} className="text-slate-400" />
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => onDateChange(e.target.value)}
-                max={todayStr()}
-                className="border-none bg-transparent text-[13px] font-semibold text-slate-800 outline-none"
-              />
-            </div>
             <button
               type="button"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold text-white bg-brand-700 hover:bg-brand-800 transition-colors"

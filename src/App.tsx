@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, ClipboardList, Activity, TimerOff, Settings } from 'lucide-react';
+import { Calculator, ClipboardList, Activity, TimerOff, Settings, Calendar, Clock } from 'lucide-react';
 import { CalculatorView } from '@/components/CalculatorView';
 import { DowntimeHistory } from '@/components/DowntimeHistory';
 import { LiveLineStatus } from '@/components/LiveLineStatus';
@@ -416,6 +416,33 @@ function epochToConsoleTime(
             <Settings size={22} />
           </button>
         </div>
+
+        <div className="app-bar-controls no-print">
+          <div className="app-bar-ctrl-group">
+            <Calendar size={14} className="text-white/80" />
+            <span className="app-bar-ctrl-label">Date</span>
+            <input
+              type="date"
+              className="app-bar-date-input"
+              value={data.date || ''}
+              max={todayStr()}
+              onChange={(e) => handleMetaChange(data.shift, 'date', e.target.value)}
+            />
+          </div>
+          <div className="app-bar-ctrl-group">
+            <Clock size={14} className="text-white/80" />
+            <span className="app-bar-ctrl-label">Shift</span>
+            <select
+              className="app-bar-shift-select"
+              value={data.shift}
+              onChange={(e) => handleShiftChange(e.target.value as Shift)}
+            >
+              {SHIFT_LIST.map((s) => (
+                <option key={s} value={s}>{SHIFT_LABELS[s]}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="sm-container" style={{ paddingTop: 20, paddingBottom: 80 }}>
@@ -431,12 +458,10 @@ function epochToConsoleTime(
             currentShift={data.shift}
             customHours={data.customHours}
             date={data.date}
-            onDateChange={(value) => handleMetaChange(data.shift, 'date', value)}
           />
         ) : view === 'downtime' ? (
           <DowntimeHistory
             date={data.date}
-            onDateChange={(value) => handleMetaChange(data.shift, 'date', value)}
             currentShift={data.shift}
             customHours={data.customHours}
           />
@@ -449,7 +474,7 @@ function epochToConsoleTime(
             customConfig={data.customConfig}
             customHours={data.customHours}
             date={data.date}
-            onShiftChange={handleShiftChange}
+
             onRowChange={handleRowChange}
             onToggle={handleToggle}
             onMetaChange={handleMetaChange}
