@@ -15,8 +15,6 @@ import {
   getDefaultRowCount,
   loadAppData,
   saveAppData,
-  SHIFT_LIST,
-  todayStr,
   type AppData,
   type CalcInputs,
   type CustomConfig,
