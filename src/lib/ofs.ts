@@ -146,28 +146,13 @@ export interface OfsSpansResponse {
   data: OfsSpansData;
 }
 
+const OFS_DISCONNECTED = "OFS data feed is disconnected";
+
 async function fetchOfsEndpoint<T>(
-  endpoint: string,
-  signal?: AbortSignal,
+  _endpoint: string,
+  _signal?: AbortSignal,
 ): Promise<T> {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ofs-status?endpoint=${endpoint}`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-    },
-    signal,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
-  }
-  const json = (await res.json()) as { data?: T; error?: string };
-  if (!json || !json.data) {
-    throw new Error(json?.error || "Unexpected response from server function");
-  }
-  return json.data;
+  throw new Error(OFS_DISCONNECTED);
 }
 
 export type LineStateClass = 'running' | 'setup' | 'downtime' | 'planned' | 'idle';
@@ -277,52 +262,9 @@ export interface OfsHourSummaryData {
 }
 
 export async function fetchHourlySummary(
-  startDate?: string,
-  endDate?: string,
-  signal?: AbortSignal,
+  _startDate?: string,
+  _endDate?: string,
+  _signal?: AbortSignal,
 ): Promise<OfsHourSummaryData> {
-  let url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ofs-status?endpoint=data/summary/hour`;
-  if (startDate && endDate) {
-    const { start, end } = dateStrToEpochRange(startDate, endDate);
-    url += `&start=${start}&end=${end}`;
-  }
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-    },
-    signal,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
-  }
-  const json = (await res.json()) as { data?: OfsHourSummaryData; error?: string };
-  if (!json || !json.data) {
-    throw new Error(json?.error || "Unexpected response from server function");
-  }
-  return json.data;
-}
-
-// Convert YYYY-MM-DD date strings to epoch ms range in the OFS console
-// timezone (Pacific/Auckland) so the server returns the correct window.
-function dateStrToEpochRange(startDate: string, endDate: string): { start: number; end: number } {
-  const startEpoch = aucklandMidnightEpoch(startDate);
-  const endEpoch = aucklandMidnightEpoch(endDate) + 24 * 3600_000 - 1;
-  return { start: startEpoch, end: endEpoch };
-}
-
-function aucklandMidnightEpoch(dateStr: string): number {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const utcMidnight = Date.UTC(y, m - 1, d, 0, 0, 0);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Pacific/Auckland',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date(utcMidnight));
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
-  const offsetHours = hour === 24 ? 0 : hour;
-  return utcMidnight - offsetHours * 3600_000;
+  throw new Error(OFS_DISCONNECTED);
 }
